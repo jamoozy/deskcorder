@@ -5,6 +5,7 @@ import signal
 import sys
 import base64
 import xml.dom.minidom
+import gobject
 
 class AudioSavior:
   def __init__(self):
@@ -16,22 +17,21 @@ class AudioSavior:
 
     self.playing = False
     self.recording = False
+    self.paused = False
 
     self.rate = 44100
     self.channels = 1
-    self.periodsize = 1000
+    self.period_size = 1000
     self.format = 'wav'
 
-    self.inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE,alsaaudio.PCM_NONBLOCK)
-    self.inp.setchannels(1)
-    self.inp.setrate(44100)
-    self.inp.setperiodsize(1000)
-    self.inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
+    # Once it's init'd, it will start to collect data, so don't init it until
+    # it's time to record.
+    self.inp = None
 
-    self.out = alsaaudio.PCM(alsaaudio.PCM_PLAYBACK,alsaaudio.PCM_NORMAL)
-    self.out.setchannels(1)
-    self.out.setrate(44100)
-    self.out.setperiodsize(1000)
+    self.out = alsaaudio.PCM(alsaaudio.PCM_PLAYBACK,alsaaudio.PCM_NONBLOCK)
+    self.out.setchannels(self.channels)
+    self.out.setrate(self.rate)
+    self.out.setperiodsize(self.period_size)
     self.out.setformat(alsaaudio.PCM_FORMAT_S16_LE)
 
   def print_info(self):
@@ -40,28 +40,88 @@ class AudioSavior:
     print 'PCM type: %d'  % a.inp.pcmtype()
 
   def record(self):
+    '''Start recording.  This will not block.  It init's the recording process.
+    This AudioSavior will continue recording until stop() gets called.'''
+    if self.playing: raise 'Already playing.'
+
     print "STARTED RECORDING" ; sys.stdout.flush()
+    self.inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE,alsaaudio.PCM_NONBLOCK)
+    self.inp.setchannels(1)
+    self.inp.setrate(44100)
+    self.inp.setperiodsize(1000)
+    self.inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
     self.data.append('')
-    while True:
+    self.recording = True
+    gobject.timeout_add(100, self.record_tick)
+
+  def record_tick(self):
+    while self.recording:
       l,data = self.inp.read()
+      # Drops 0-length data and data recorded while this is paused.
       if l > 0:
-        self.data[-1] += data
+        if not self.paused:
+          self.data[-1] += data
+      else:
+        print 'Out of data.'
+        return True
+    else:
+      print 'Stopped.'
+      return False
 
   def play(self):
-    print "PLAYING AUDIO"
     if self.format == 'wav':
       self.out.setformat(alsaaudio.PCM_FORMAT_S16_LE)
     elif self.format == 'mp3':
       self.out.setformat(alsaaudio.PCM_FORMAT_MP3)
     else:
       raise 'Unrecognized format: "%s"' % self.format
-    self.out.write(self.data)
+
+    if len(self.data) == 0 or len(self.data[0]) == 0:
+      return
+
+    self.playing = True
+    self.play_iter1 = 0
+    self.play_iter2 = self.period_size
+    self.data_iter = 0
+    gobject.timeout_add(100, self.play_tick)
+
+  def play_tick(self):
+    if self.playing:
+      if self.paused: return True
+      # This has the effect of a do-while loop that loops until no more data
+      # can be written to the speakers.
+      while True:
+        data = self.data[self.data_iter][self.play_iter1:self.play_iter2]
+        if self.out.write(data) != 0:
+          self.play_iter1 = self.play_iter2
+          self.play_iter2 += self.period_size
+          if self.play_iter1 >= len(self.data[self.data_iter]):
+            self.play_iter1 = 0
+            self.play_iter2 = self.period_size
+            self.data_iter += 1
+            if self.data_iter >= len(self.data):
+              self.stop()
+              return False
+          elif self.play_iter2 > len(self.data[self.data_iter]):
+            self.play_iter2 = len(self.data[self.data_iter])
+        else:
+          return self.playing
+    else:
+      return False
 
   def pause(self):
-    print 'pause() not implemented'
+    self.paused = True
+
+  def unpause(self):
+    self.paused = False
 
   def stop(self):
-    print 'stop() not implemented'
+    self.paused = False
+    self.recording = False
+    self.playing = False
+    if self.inp is not None:
+      self.inp.close()
+      self.inp = None
 
   def save(self, fname = "strokes.wav"):
     w = wave.open(fname, 'wb')

@@ -12,6 +12,7 @@ import time
 import thread
 import os
 import signal
+import recorder
 try:
   import audiosavior
   audio = True
@@ -63,10 +64,10 @@ class Canvas(gtk.DrawingArea):
     self.device = 0
     self.radius = 3.0
     self.drawing = False
-    self.window_size = None
+    self.size = None
     self.raster = None
     self.raster_cr = None
-    self.color = (0., 0., 0.)
+    self.color = (0.0, 0.0, 0.0)
 
     # Keeps track of whether the state of the canvas is reflected in a file
     # somewhere or not.  If not, this is dirty.
@@ -90,11 +91,11 @@ class Canvas(gtk.DrawingArea):
     # radius, (r,g,b) color tuple, and (w,h) window size tuple.
     self.trace = [time.time(), []]
 
-    # Also somewhat complex, but not nearly as much as with state.
+    # Not nearly as complex as trace.
     #
     # This is a list of points.  Each point is a tuple of time, (x,y) position
     # tuple, and (w,h) window size tuple.
-    self.position = []
+    self.positions = []
 
     self.set_events(gtk.gdk.POINTER_MOTION_MASK  | gtk.gdk.BUTTON_MOTION_MASK | gtk.gdk.BUTTON1_MOTION_MASK | gtk.gdk.BUTTON2_MOTION_MASK | gtk.gdk.BUTTON3_MOTION_MASK | gtk.gdk.BUTTON_PRESS_MASK | gtk.gdk.BUTTON_RELEASE_MASK)
 
@@ -112,31 +113,31 @@ class Canvas(gtk.DrawingArea):
     self.frozen = False
 
   def gtk_configure(self, widget, event):
-    self.window_size = self.window.get_size()
-    self.raster = self.window.cairo_create().get_target().create_similar(cairo.CONTENT_COLOR, self.window_size[0], self.window_size[1])
+    self.size = self.window.get_size()
+    self.raster = self.window.cairo_create().get_target().create_similar(cairo.CONTENT_COLOR, self.size[0], self.size[1])
     self.raster_cr = cairo.Context(self.raster)
     self.raster_cr.set_source_rgba(1.0, 1.0, 1.0, 1.0)
-    self.raster_cr.rectangle(0.0, 0.0, self.window_size[0], self.window_size[1])
+    self.raster_cr.rectangle(0.0, 0.0, self.size[0], self.size[1])
     self.raster_cr.fill()
     for curve in self.trace[-1]:
       self.draw(curve[0][3], curve[0][2],
-          ((curve[0][1][0]*self.window_size[0])/curve[0][4][0],
-           (curve[0][1][1]*self.window_size[1])/curve[0][4][1]))
+          ((curve[0][1][0]*self.size[0])/curve[0][4][0],
+           (curve[0][1][1]*self.size[1])/curve[0][4][1]))
       if len(curve) > 1:
         self.draw(curve[1][3], curve[1][2],
-          ((curve[0][1][0]*self.window_size[0])/curve[1][4][0],
-           (curve[0][1][1]*self.window_size[1])/curve[1][4][1]),
-          ((curve[1][1][0]*self.window_size[0])/curve[1][4][0],
-           (curve[1][1][1]*self.window_size[1])/curve[1][4][1])
+          ((curve[0][1][0]*self.size[0])/curve[1][4][0],
+           (curve[0][1][1]*self.size[1])/curve[1][4][1]),
+          ((curve[1][1][0]*self.size[0])/curve[1][4][0],
+           (curve[1][1][1]*self.size[1])/curve[1][4][1])
         )
       for i in xrange(len(curve)-2):
         self.draw(curve[i+2][3], curve[i+2][2],
-          ((curve[i  ][1][0]*self.window_size[0])/curve[i+2][4][0],
-           (curve[i  ][1][1]*self.window_size[1])/curve[i+2][4][1]),
-          ((curve[i+1][1][0]*self.window_size[0])/curve[i+2][4][0],
-           (curve[i+1][1][1]*self.window_size[1])/curve[i+2][4][1]),
-          ((curve[i+2][1][0]*self.window_size[0])/curve[i+2][4][0],
-           (curve[i+2][1][1]*self.window_size[1])/curve[i+2][4][1])
+          ((curve[i  ][1][0]*self.size[0])/curve[i+2][4][0],
+           (curve[i  ][1][1]*self.size[1])/curve[i+2][4][1]),
+          ((curve[i+1][1][0]*self.size[0])/curve[i+2][4][0],
+           (curve[i+1][1][1]*self.size[1])/curve[i+2][4][1]),
+          ((curve[i+2][1][0]*self.size[0])/curve[i+2][4][0],
+           (curve[i+2][1][1]*self.size[1])/curve[i+2][4][1])
         )
     self.refresh()
 
@@ -160,9 +161,9 @@ class Canvas(gtk.DrawingArea):
           self.draw(self.color, r, self.trace[-1][-1][-1][1], pos)
         else:
           self.draw(self.color, r, pos)
-        self.trace[-1][-1].append((time.time(), pos, r, self.color, self.window_size))
+        self.trace[-1][-1].append((time.time(), pos, r, self.color, self.size))
       else:
-        self.position.append((time.time(), pos, self.window_size))
+        self.positions.append((time.time(), pos, self.size))
 
   def gtk_button_press(self, widget, event):
     if not self.frozen:
@@ -184,7 +185,7 @@ class Canvas(gtk.DrawingArea):
     cr.paint()
     cr.set_line_width(2)
     cr.set_source_rgba(0.0, 0.0, 0.0, 0.25)
-    cr.rectangle(0.0, 0.0, self.window_size[0], self.window_size[1])
+    cr.rectangle(0.0, 0.0, self.size[0], self.size[1])
     cr.stroke()
 
   def setRadius(self, rad):
@@ -194,9 +195,9 @@ class Canvas(gtk.DrawingArea):
     self.color = (r,g,b)
 
   def clear(self):
-    self.window_size = self.window.get_size()
+    self.size = self.window.get_size()
     self.raster_cr.set_source_rgba(1.0, 1.0, 1.0, 1.0)
-    self.raster_cr.rectangle(0.0, 0.0, self.window_size[0], self.window_size[1])
+    self.raster_cr.rectangle(0.0, 0.0, self.size[0], self.size[1])
     self.raster_cr.fill()
     self.refresh()
     if not self.frozen:
@@ -205,13 +206,13 @@ class Canvas(gtk.DrawingArea):
 
   def refresh(self):
     reg = gtk.gdk.Region()
-    reg.union_with_rect((0, 0, self.window_size[0], self.window_size[1]))
+    reg.union_with_rect((0, 0, self.size[0], self.size[1]))
     self.window.invalidate_region(reg, False)
 
   def reset(self):
     self.clear()
     self.trace = [time.time(), []]
-    self.position = []
+    self.positions = []
 
   def draw(self, color, r, pos1, pos2=None, pos3=None):
     self.raster_cr.set_source_rgba(color[0], color[1], color[2], 1.0)
@@ -253,74 +254,6 @@ class Canvas(gtk.DrawingArea):
             int(abs(pos2[1] - pos3[1]) + r)))
     self.window.invalidate_region(reg, False)
 
-  def save(self, fname = None, format = "xml"):
-    if fname == None: fname = 'strokes.xml'
-    chooser = gtk.FileChooserDialog('Choose a file to save', None,
-        gtk.FILE_CHOOSER_ACTION_SAVE, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
-          gtk.STOCK_SAVE, gtk.RESPONSE_ACCEPT))
-    chooser.set_do_overwrite_confirmation(True)
-    chooser.set_current_folder('data')
-    chooser.set_current_name(fname)
-    if chooser.run() == gtk.RESPONSE_ACCEPT:
-      self.saveXML(chooser.get_filename())
-    chooser.destroy()
-
-#    if format == "xml":
-#      if fname is None:
-#        self.saveXML()
-#      else:
-#        self.saveXML(fname)
-#    else:
-#      if fname is None:
-#        self.saveRAW()
-#      else:
-#        self.saveRAW(fname)
-
-  def saveXML(self, fname = "strokes.wbx"):
-    if self.audioenabled:
-      recorder.saveDCX(fname, self.trace, self.positions,
-          self.audiosavior.data)
-    else:
-      recorder.saveDCX(fname, self.trace, self.positions)
-
-  def saveTXT(self, fname = "strokes.wbt"):
-    recorder.saveTXT(self.trace, fname)
-
-  def saveRAW(self, fname = "strokes.wbr"):
-    print "I don't know how to save raw files yet ..."
-
-  def open(self, fname = None, format = 'xml'):
-    if self.dirty and not self.dirtyOK(): return
-    if fname == None: fname = 'strokes.xml'
-    chooser = gtk.FileChooserDialog('Choose a file to save', None,
-        gtk.FILE_CHOOSER_ACTION_OPEN, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
-          gtk.STOCK_OPEN, gtk.RESPONSE_ACCEPT))
-    chooser.set_do_overwrite_confirmation(True)
-    chooser.set_current_folder('data')
-    chooser.set_current_name(fname)
-    if chooser.run() == gtk.RESPONSE_ACCEPT:
-      self.openXML(chooser.get_filename())
-      self.dirty = False
-    chooser.destroy()
-
-  def openXML(self, fname = 'strokes.wbx'):
-    self.trace, self.position = recorder.openXML(fname, self.window_size)
-
-# Each point is a tuple containing:
-#     a time stamp, (x,y) position tuple, radius, color, and (w,h) window size tuple.
-
-  def openRAW(self, fname = 'strokes.wbr'):
-    print "I don't know how to open raw files yet ..."
-
-  def openTXT(self, fname = 'strokes.wbt'):
-    print "I don't know how to open text files yet ..."
-
-  def dirtyOK(self):
-    d = gtk.MessageDialog(None, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_YES_NO,
-        "You have unsaved changes.  Are you sure you want to continue?")
-    ok = d.run() == gtk.RESPONSE_YES
-    return ok
-
 class Deskcorder:
   def __init__(self, gladefile, audioenabled=True):
     # Playback variables.
@@ -333,15 +266,6 @@ class Deskcorder:
     self.glade_tree = gtk.glade.XML(gladefile)
     self.root = self.glade_tree.get_widget("mainwindow")
 
-    # Set up audio (or not).
-    self.audioenabled = audioenabled
-    if audioenabled:
-      self.audiosavior = audiosavior.AudioSavior()
-      self.glade_tree.get_widget("record").connect("clicked",
-          lambda x: self.audiosavior.record())
-    else:
-      print "Audio disabled."
-
     # Add the canvas, too.
     self.canvas = Canvas()
     self.canvas.show()
@@ -351,12 +275,21 @@ class Deskcorder:
         lambda x: self.canvas.clear())
 
     # playback
-    self.glade_tree.get_widget("play").connect("clicked",
-        lambda x: self.play(time.time()))
-    self.glade_tree.get_widget("pause").connect("clicked",
-        lambda x: self.pause(time.time()))
-    self.glade_tree.get_widget("stop").connect("clicked",
-        lambda x: self.stop())
+    self.record_button = self.glade_tree.get_widget("record")
+    self.play_button = self.glade_tree.get_widget("play")
+    self.pause_button = self.glade_tree.get_widget("pause")
+    self.stop_button = self.glade_tree.get_widget("stop")
+    self.play_button.connect("clicked", lambda x: self.play(time.time()))
+    self.pause_button.connect("toggled", lambda x: self.pause(time.time()))
+    self.stop_button.connect("clicked", lambda x: self.stop())
+
+    # Set up audio (or not).
+    self.audioenabled = audioenabled
+    if audioenabled:
+      self.audiosavior = audiosavior.AudioSavior()
+      self.record_button.connect("toggled", lambda x: self.record())
+    else:
+      print "Audio disabled."
 
     # pen widths
     self.glade_tree.get_widget("thin").connect("toggled",
@@ -394,7 +327,7 @@ class Deskcorder:
     self.root.connect("delete-event", lambda x,y: sys.exit(0))
 
     self.glade_tree.get_widget("file/new").connect("activate",
-        lambda x: self.reset())
+        lambda x: self.canvas.reset())
     self.glade_tree.get_widget("file/open").connect("activate",
         lambda x: self.open())
     self.glade_tree.get_widget("file/save").connect("activate",
@@ -406,7 +339,7 @@ class Deskcorder:
     self.glade_tree.get_widget("open").connect("clicked",
         lambda x: self.open())
     self.glade_tree.get_widget("new").connect("clicked",
-        lambda x: self.reset())
+        lambda x: self.canvas.reset())
     self.glade_tree.get_widget("file/quit").connect("activate",
         lambda x: sys.exit(0))
     self.glade_tree.get_widget("quit").connect("clicked",
@@ -416,21 +349,45 @@ class Deskcorder:
 
     self.canvas.set_extension_events(gtk.gdk.EXTENSION_EVENTS_ALL)
 
-  def run(self):
+  def run(self, fname = None):
+    '''Runs the program.'''
     self.root.show()
+    try:
+      if fname != None:
+        self.openDCX(fname)
+    except IOError:
+      print 'No such file: "%s"' % fname
     try:
       gtk.main()
     except KeyboardInterrupt:
-#      os.kill(self.AudioSaviorPID, signal.SIGTERM)
       pass
     self.root.hide()
 
-  def playing(self):
-    return self.play_time != None
+  def record(self):
+    '''Starts the mic recording.'''
+    if self.record_button.get_active():
+      try:
+        self.audiosavior.record()
+      except str:
+        print 'Caught exception: "%s"' % e.message
+        self.record_button.set_active(False)
+    else:
+      self.audiosavior.stop()
+
+  def is_playing(self):
+    '''Determines if this is playing or not.'''
+    return self.play_time is not None
 
   def play(self, t):
-    print "Playing"
+    '''start playing what's in this file.'''
+    if self.is_playing():
+      if self.is_paused():
+        self.pause(t)
+      return
+
     self.canvas.freeze()
+    if self.audioenabled:
+      self.audiosavior.play()
     self.play_time = t
     self.slide_i = 0
     self.curve_i = 0
@@ -438,11 +395,16 @@ class Deskcorder:
     self.play_timer_id = gobject.timeout_add(100, self.play_tick)
 
   def play_tick(self):
-    if not self.playing(): return False
+    '''Do one 'tick' in the process of playing back what's stored in this
+    program.'''
+    if not self.is_playing(): return False
+    if self.is_paused(): return True
 
     # dt is the difference between when the trace was recorded and when the
     # play button was hit.
     dt = self.play_time - self.canvas.trace[0]
+    for pause in self.break_times:
+      dt += pause[1] - pause[0]
 
     now = time.time()
 
@@ -459,41 +421,44 @@ class Deskcorder:
       if type(slide) == float:
         if slide + dt <= now:
           self.canvas.clear()
-      elif type(slide) == list:
+      elif type(slide) == list and len(slide) > 0:
         curve = slide[self.curve_i]
-        point = curve[self.point_i]
-        radius = point[2]
-        color = point[3]
-        print 'point[0]:%ld + dt:%ld <= now:%ld' % (point[0], dt, now)
-        if point[0] + dt <= now:
-          if self.point_i > 1:
-            self.canvas.draw(color, radius, curve[self.point_i-2][1], curve[self.point_i-1][1], curve[self.point_i][1])
-          elif self.point_i > 0:
-            self.canvas.draw(color, radius, curve[self.point_i-1][1], curve[self.point_i][1])
+        if len(curve) > 0:
+          point = curve[self.point_i]
+          radius = point[2]
+          color = point[3]
+          if point[0] + dt <= now:
+            if self.point_i > 1:
+              self.canvas.draw(color, radius, curve[self.point_i-2][1], curve[self.point_i-1][1], curve[self.point_i][1])
+            elif self.point_i > 0:
+              self.canvas.draw(color, radius, curve[self.point_i-1][1], curve[self.point_i][1])
+            else:
+              self.canvas.draw(color, radius, curve[self.point_i][1])
           else:
-            self.canvas.draw(color, radius, curve[self.point_i][1])
-        else:
-          return True
+            return True
 
-      if not self.play_iterate():
-        self.stop()
+      if not self.play_iters_inc():
+        self.done()
         return False
 
-  def play_iterate(self):
-    if type(self.canvas.trace[self.slide_i]) == list:
-      self.point_i += 1
-      if self.point_i < len(self.canvas.trace[self.slide_i][self.curve_i]):
-        return True
-      self.point_i = 0
+  def play_iters_inc(self):
+    '''Increments all the iterators that have to do with the playing
+    process.'''
+    if len(self.canvas.trace) > 0:
+      if type(self.canvas.trace[self.slide_i]) == list and len(self.canvas.trace[self.slide_i]) > 0:
+        self.point_i += 1
+        if self.point_i < len(self.canvas.trace[self.slide_i][self.curve_i]):
+          return True
+        self.point_i = 0
 
-      self.curve_i += 1
-      if self.curve_i < len(self.canvas.trace[self.slide_i]):
-        return True
-      self.curve_i = 0
+        self.curve_i += 1
+        if self.curve_i < len(self.canvas.trace[self.slide_i]):
+          return True
+        self.curve_i = 0
 
-    self.slide_i += 1
-    if self.slide_i < len(self.canvas.trace):
-      return True
+      self.slide_i += 1
+      if self.slide_i < len(self.canvas.trace):
+        return True
 
     self.slide_i = 0
     self.curve_i = 0
@@ -501,16 +466,45 @@ class Deskcorder:
     return False
 
   def pause(self, t):
-    if self.last_pause == None:
-      print "Pausing"
-      self.last_pause == t
+    '''Pauses playback and audio recording.'''
+    if self.is_playing():
+      if self.last_pause == None:
+        self.last_pause = t
+        self.pause_button.set_active(True)
+        if self.audioenabled:
+          self.audiosavior.pause()
+      else:
+        self.break_times.append((self.last_pause, t))
+        self.last_pause = None
+        self.pause_button.set_active(False)
+        if self.audioenabled:
+          self.audiosavior.unpause()
     else:
-      print "Unpausing"
-      self.break_times.append((self.last_pause, t))
-      self.last_pause = None
+      self.pause_button.set_active(False)
+
+
+  def is_paused(self):
+    return self.last_pause is not None
+
+  def done(self):
+    '''The drawing portion is done playing back.  Wait for the speech portion
+    to finish also.'''
+    if self.audioenabled:
+      gobject.timeout_add(100, self.check_done)
+    else:
+      self.stop()
+
+  def check_done(self):
+    if not self.audiosavior.playing:
+      self.stop()
+      return False
+    return True
 
   def stop(self):
-    print 'Stopping'
+    if self.audioenabled: self.audiosavior.stop()
+    if self.is_paused():
+      self.pause(time.time())
+    self.record_button.set_active(False)
     self.canvas.unfreeze()
     self.play_time = None
     self.play_timer_id = None
@@ -519,11 +513,80 @@ class Deskcorder:
     self.audiosavior.stop()
 
 
+
+  ############################################################################
+  # ------------------------------ File I/O -------------------------------- #
+  ############################################################################
+
+  def save(self, fname = None, format = "xml"):
+    if fname == None: fname = 'save.dcx'
+    fcd = gtk.FileChooserDialog('Choose a file to save', None,
+        gtk.FILE_CHOOSER_ACTION_SAVE, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+          gtk.STOCK_SAVE, gtk.RESPONSE_ACCEPT))
+    fcd.set_do_overwrite_confirmation(True)
+    fcd.set_current_folder('data')
+    fcd.set_current_name(fname)
+    if fcd.run() == gtk.RESPONSE_ACCEPT:
+      self.saveDCX(fcd.get_filename())
+    fcd.destroy()
+
+  def saveDCX(self, fname = "strokes.wbx"):
+    if self.audioenabled:
+      recorder.saveDCX(fname, self.canvas.trace, self.canvas.positions,
+          self.audiosavior.data)
+    else:
+      recorder.saveDCX(fname, self.canvas.trace, self.canvas.positions)
+
+  def saveDCT(self, fname = "strokes.wbt"):
+    recorder.saveDCT(self.canvas.trace, fname)
+
+  def saveDCR(self, fname = "strokes.wbr"):
+    print "I don't know how to save raw files yet ..."
+
+  def open(self, fname = None, format = 'xml'):
+    if self.canvas.dirty and not self.dirtyOK(): return
+    if fname == None: fname = 'save.dcx'
+    chooser = gtk.FileChooserDialog('Choose a file to save', None,
+        gtk.FILE_CHOOSER_ACTION_OPEN, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+          gtk.STOCK_OPEN, gtk.RESPONSE_ACCEPT))
+    chooser.set_do_overwrite_confirmation(True)
+    chooser.set_current_folder('data')
+    chooser.set_current_name(fname)
+    if chooser.run() == gtk.RESPONSE_ACCEPT:
+      self.openDCX(chooser.get_filename())
+      self.canvas.dirty = False
+    chooser.destroy()
+
+  def openDCX(self, fname = 'save.dcx'):
+    self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
+        recorder.openDCX(fname, self.canvas.size)
+
+  def openDCT(self, fname = 'save.dcx'):
+    self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
+        recorder.openDCT(fname, self.canvas.size)
+
+  def dirtyOK(self):
+    d = gtk.MessageDialog(None, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_YES_NO,
+        "You have unsaved changes.  Are you sure you want to continue?")
+    ok = d.run() == gtk.RESPONSE_YES
+    return ok
+
+
+
+##############################################################################
+# -------------------------- Testing/Running ------------------------------- #
+##############################################################################
+
 if __name__ == '__main__':
+  fname = None
   if len(sys.argv) > 1:
     if sys.argv[1] == '-h' or sys.argv[1] == '--help':
       print 'Usage %s [-A|--no-audio]'
     elif sys.argv[1] == '-A' or sys.argv[1] == '--no-audio':
       audio = False
-  wb = Deskcorder("layout.glade", audio)
-  wb.run()
+    elif sys.argv[1].startswith('--open-dcx='):
+      fname = sys.argv[1][11:]
+    else:
+      print 'Unrecognized command: "%s"' % sys.argv[1]
+  d = Deskcorder("layout.glade", audio)
+  d.run(fname)
