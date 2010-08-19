@@ -76,6 +76,19 @@
                   <widget class="GtkMenu" id="edit-menu">
                     <property name="visible">True</property>
                     <child>
+                      <widget class="GtkImageMenuItem" id="edit/add">
+                        <property name="label">gtk-add</property>
+                        <property name="visible">True</property>
+                        <property name="use_underline">True</property>
+                        <property name="use_stock">True</property>
+                      </widget>
+                    </child>
+                    <child>
+                      <widget class="GtkSeparatorMenuItem" id="separatormenuitem2">
+                        <property name="visible">True</property>
+                      </widget>
+                    </child>
+                    <child>
                       <widget class="GtkImageMenuItem" id="edit/cut">
                         <property name="label">gtk-cut</property>
                         <property name="visible">True</property>
@@ -155,6 +168,17 @@
                 <property name="label" translatable="yes">new</property>
                 <property name="use_underline">True</property>
                 <property name="stock_id">gtk-new</property>
+              </widget>
+              <packing>
+                <property name="expand">False</property>
+              </packing>
+            </child>
+            <child>
+              <widget class="GtkToolButton" id="add">
+                <property name="visible">True</property>
+                <property name="label" translatable="yes">add</property>
+                <property name="use_underline">True</property>
+                <property name="stock_id">gtk-add</property>
               </widget>
               <packing>
                 <property name="expand">False</property>
