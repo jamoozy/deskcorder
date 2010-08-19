@@ -82,13 +82,18 @@ def saveDCX(fname = 'save.dcx', trace = [], positions = [], audiofiles = []):
   f.close()
 
 def openDCX(fname = 'save.dcx', win_sz = (640, 480)):
-  '''Reads DCX-v*'''
+  '''Reads DCX-v*.
+  @win_sz: Needed to scale the (x,y) coords.'''
   # TODO unify these functions.
   xmlDoc = xml.dom.minidom.parse(fname)
   document = xmlDoc.getElementsByTagName('document')[0]
   v_str = document.getAttribute('version')
   v = __parse_version_string(v_str) if v_str else (0,0,0)
   if v[0] == 0:
+    if v[0] == 0:
+      if v[1] == 0:
+        trace, positions = openXML(fname, win_sz)
+        return (trace, positions, [])
     if v[1] == 1:
       trace = []
       positions = []
@@ -97,7 +102,7 @@ def openDCX(fname = 'save.dcx', win_sz = (640, 480)):
         trace.append(float(slide.getAttribute('cleartime')))
         trace.append([])
         for stroke in slide.getElementsByTagName('stroke'):
-          cs = stroke.getAttribute('color')
+          cs = stroke.getAttribute('color') # Of the form "#RRGGBB"
           color = tuple(map(lambda x: int(x, 16), (cs[1:3], cs[3:5], cs[5:])))
           trace[-1].append([])
           for point in stroke.getElementsByTagName('point'):
