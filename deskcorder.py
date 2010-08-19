@@ -213,6 +213,7 @@ class Canvas(gtk.DrawingArea):
     self.clear()
     self.trace = [time.time(), []]
     self.positions = []
+    self.dirty = False
 
   def draw(self, color, r, pos1, pos2=None, pos3=None):
     self.raster_cr.set_source_rgba(color[0], color[1], color[2], 1.0)
@@ -327,7 +328,9 @@ class Deskcorder:
     self.root.connect("delete-event", lambda x,y: sys.exit(0))
 
     self.glade_tree.get_widget("file/new").connect("activate",
-        lambda x: self.canvas.reset())
+        lambda x: self.reset())
+    self.glade_tree.get_widget("edit/add").connect("activate",
+        lambda x: self.canvas.clear())
     self.glade_tree.get_widget("file/open").connect("activate",
         lambda x: self.open())
     self.glade_tree.get_widget("file/save").connect("activate",
@@ -336,10 +339,12 @@ class Deskcorder:
         lambda x: self.save())
 
 
+    self.glade_tree.get_widget("new").connect("clicked",
+        lambda x: self.reset())
+    self.glade_tree.get_widget("add").connect("clicked",
+        lambda x: self.canvas.clear())
     self.glade_tree.get_widget("open").connect("clicked",
         lambda x: self.open())
-    self.glade_tree.get_widget("new").connect("clicked",
-        lambda x: self.canvas.reset())
     self.glade_tree.get_widget("file/quit").connect("activate",
         lambda x: sys.exit(0))
     self.glade_tree.get_widget("quit").connect("clicked",
@@ -357,19 +362,26 @@ class Deskcorder:
         self.openDCX(fname)
     except IOError:
       print 'No such file: "%s"' % fname
+
     try:
       gtk.main()
     except KeyboardInterrupt:
       pass
     self.root.hide()
 
+  def reset(self):
+    '''Clears the state of the canvas and audio, as if the system had just
+    started.'''
+    if not self.canvas.dirty or self.dirtyOK():
+      self.canvas.reset()
+      self.audiosavior.data = []
+
   def record(self):
     '''Starts the mic recording.'''
     if self.record_button.get_active():
       try:
         self.audiosavior.record()
-      except str:
-        print 'Caught exception: "%s"' % e.message
+      except recorder.InvalidOperationError:
         self.record_button.set_active(False)
     else:
       self.audiosavior.stop()
@@ -408,6 +420,12 @@ class Deskcorder:
 
     now = time.time()
 
+    print "video: %fs" % (now - self.play_time)
+    print "audio: %fs" % self.audiosavior.get_s_played()
+    audio_time = self.audiosavior.get_s_played()
+    if audio_time >= 0:
+      dt + audio_time - now + self.play_time
+
     # I'm simulating a do-while loop here.  This one is basically:
     #  1. While we still have stuff to iterate over, iterate.
     #  2. While the thing our iterator is pointing at is still old enough to
@@ -421,21 +439,26 @@ class Deskcorder:
       if type(slide) == float:
         if slide + dt <= now:
           self.canvas.clear()
-      elif type(slide) == list and len(slide) > 0:
-        curve = slide[self.curve_i]
-        if len(curve) > 0:
-          point = curve[self.point_i]
-          radius = point[2]
-          color = point[3]
-          if point[0] + dt <= now:
-            if self.point_i > 1:
-              self.canvas.draw(color, radius, curve[self.point_i-2][1], curve[self.point_i-1][1], curve[self.point_i][1])
-            elif self.point_i > 0:
-              self.canvas.draw(color, radius, curve[self.point_i-1][1], curve[self.point_i][1])
+        else:
+          return True
+      elif type(slide) == list:
+        if len(slide) > 0:
+          curve = slide[self.curve_i]
+          if len(curve) > 0:
+            point = curve[self.point_i]
+            radius = point[2]
+            color = point[3]
+            if point[0] + dt <= now:
+              if self.point_i > 1:
+                self.canvas.draw(color, radius, curve[self.point_i-2][1], curve[self.point_i-1][1], curve[self.point_i][1])
+              elif self.point_i > 0:
+                self.canvas.draw(color, radius, curve[self.point_i-1][1], curve[self.point_i][1])
+              else:
+                self.canvas.draw(color, radius, curve[self.point_i][1])
             else:
-              self.canvas.draw(color, radius, curve[self.point_i][1])
-          else:
-            return True
+              return True
+      else:
+        print 'Warning, unknown type: %s' % type(slide)
 
       if not self.play_iters_inc():
         self.done()
@@ -495,7 +518,7 @@ class Deskcorder:
       self.stop()
 
   def check_done(self):
-    if not self.audiosavior.playing:
+    if not self.audiosavior.is_playing():
       self.stop()
       return False
     return True
@@ -528,6 +551,7 @@ class Deskcorder:
     fcd.set_current_name(fname)
     if fcd.run() == gtk.RESPONSE_ACCEPT:
       self.saveDCX(fcd.get_filename())
+      self.canvas.dirty = False
     fcd.destroy()
 
   def saveDCX(self, fname = "strokes.wbx"):
@@ -541,21 +565,21 @@ class Deskcorder:
     recorder.saveDCT(self.canvas.trace, fname)
 
   def saveDCR(self, fname = "strokes.wbr"):
-    print "I don't know how to save raw files yet ..."
+    raise NotImplementedError("I don't know how to save raw files yet ...")
 
   def open(self, fname = None, format = 'xml'):
     if self.canvas.dirty and not self.dirtyOK(): return
     if fname == None: fname = 'save.dcx'
-    chooser = gtk.FileChooserDialog('Choose a file to save', None,
+    fcd = gtk.FileChooserDialog('Choose a file to save', None,
         gtk.FILE_CHOOSER_ACTION_OPEN, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
           gtk.STOCK_OPEN, gtk.RESPONSE_ACCEPT))
-    chooser.set_do_overwrite_confirmation(True)
-    chooser.set_current_folder('data')
-    chooser.set_current_name(fname)
-    if chooser.run() == gtk.RESPONSE_ACCEPT:
-      self.openDCX(chooser.get_filename())
+    fcd.set_do_overwrite_confirmation(True)
+    fcd.set_current_folder('data')
+    fcd.set_current_name(fname)
+    if fcd.run() == gtk.RESPONSE_ACCEPT:
+      self.openDCX(fcd.get_filename())
       self.canvas.dirty = False
-    chooser.destroy()
+    fcd.destroy()
 
   def openDCX(self, fname = 'save.dcx'):
     self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
@@ -568,7 +592,8 @@ class Deskcorder:
   def dirtyOK(self):
     d = gtk.MessageDialog(None, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_YES_NO,
         "You have unsaved changes.  Are you sure you want to continue?")
-    ok = d.run() == gtk.RESPONSE_YES
+    ok = (d.run() == gtk.RESPONSE_YES)
+    d.destroy()
     return ok
 
 

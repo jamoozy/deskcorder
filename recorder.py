@@ -43,11 +43,14 @@ def read(fname):
     print '''Warning: %s is empty.''' % fname
 
 def saveDCX(fname = 'save.dcx', trace = [], positions = [], audiofiles = []):
-  '''Saves DCX-v0.1'''
+  '''Saves DCX-v0.1
+  @trace: A complex list.  See the Canvas object for details.
+  @positions: A list of (t,(x,y),(w,h)) tuples
+  @audiofiles: A list of (t,data) tuples'''
   # TODO test
   f = open(fname, 'w')
   f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
-  f.write('<document version="0.1">\n')
+  f.write('<document version="0.1.1">\n')
   for slide in trace:
     if type(slide) == float:
       f.write('  <slide cleartime="%lf">\n' % slide)
@@ -70,8 +73,8 @@ def saveDCX(fname = 'save.dcx', trace = [], positions = [], audiofiles = []):
         (pos[1][0] / float(pos[2][0]), pos[1][1] / float(pos[2][1]), pos[0]))
   if type(audiofiles) == list:
     for af in audiofiles:
-      f.write('  <audiofile type="wav" encoding="base64">')
-      f.write(base64.b64encode(af))
+      f.write('  <audiofile time="%lf" type="wav" encoding="base64">' % af[0])
+      f.write(base64.b64encode(af[1]))
       f.write('</audiofile>\n')
   elif type(audiofiles) == str:
     f.write('  <audiofile type="wav" encoding="base64">')
@@ -115,7 +118,12 @@ def openDCX(fname = 'save.dcx', win_sz = (640, 480)):
           (float(pos.getAttribute('x')) * win_sz[0], float(pos.getAttribute('y')) * win_sz[1]),
           win_sz))
       for af in document.getElementsByTagName('audiofile'):
-        audiofiles.append(base64.b64decode(af.firstChild.wholeText))
+        if v[2] == 1:
+          audiofiles.append((float(af.getAttribute('time')), base64.b64decode(af.firstChild.wholeText)))
+        elif v[2] == 0:
+          audiofiles.append(base64.b64decode(af.firstChild.wholeText))
+        else:
+          print 'Warning: unrecognized bug version: ' + v_str
       return trace, positions, audiofiles
   raise 'Unrecognized version: %s' % v_str
 
