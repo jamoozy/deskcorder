@@ -79,7 +79,7 @@ def saveDCB(fname = 'save.dcb', trace = [], positions = [], audiofiles = []):
       f.write(struct.pack("<I", len(audiofiles)))
       for af in audiofiles:
         f.write(struct.pack("<QQ", af[0], len(af[1])))
-        f.write(zlib.compress(af[1]))
+        f.write(zlib.compress(af[1], zlib.Z_BEST_COMPRESSION))
   f.flush()
   f.close()
 
@@ -113,7 +113,7 @@ def openDCB(fname = 'save.dcb', win_sz = (640,480)):
       num_afs = struct.unpack("<I", f.read(4))[0]
       for af_i in range(num_afs):
         t, sz = struct.unpack("<QQ", f.read(8 + 8))
-        audiofiles.append([t, zlib.uncompress(f.read(sz))])
+        audiofiles.append([t, zlib.decompress(f.read(sz))])
   f.close()
   return trace, positions, audiofiles
 
