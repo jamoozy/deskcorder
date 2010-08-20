@@ -54,31 +54,31 @@ def saveDCB(fname = 'save.dcb', trace = [], positions = [], audiofiles = []):
   '''Saves DCB-v0.1.1'''
   f = open(fname, 'wb')
   f.write(DCB_MAGIC_NUMBER)
-  f.write(struct.pack("III", 0, 1, 1))  # file version
-  f.write(struct.pack("I", len(trace) / 2))
+  f.write(struct.pack("<III", 0, 1, 1))  # file version
+  f.write(struct.pack("<I", len(trace) / 2))
   for slide in trace:
     if type(slide) == float:
-      f.write(struct.pack("L", int(slide * 1000)))
+      f.write(struct.pack("<Q", int(slide * 1000)))
     else:
-      f.write(struct.pack("I", len(slide)))
+      f.write(struct.pack("<I", len(slide)))
       for stroke in slide:
-        f.write(struct.pack("I", len(stroke)))
+        f.write(struct.pack("<I", len(stroke)))
         if len(stroke) > 0:
-          f.write(struct.pack("fff", stroke[0][3][0], stroke[0][3][1], stroke[0][3][2]))
+          f.write(struct.pack("<fff", stroke[0][3][0], stroke[0][3][1], stroke[0][3][2]))
           for point in stroke:
             x = point[1][0] / float(point[4][0])
             y = point[1][1] / float(point[4][1])
             thickness = point[2] / (math.sqrt(point[4][0] * point[4][0] +
                                               point[4][1] * point[4][1]))
-            f.write(struct.pack("Lfff", point[0] * 1000, x, y, thickness))
-      f.write(struct.pack("I", len(positions)))
+            f.write(struct.pack("<Qfff", point[0] * 1000, x, y, thickness))
+      f.write(struct.pack("<I", len(positions)))
       for pos in positions:
         x = pos[1][0] / float(pos[2][0])
         y = pos[1][1] / float(pos[2][1])
-        f.write(struct.pack("Lff", pos[0], x, y))
-      f.write(struct.pack("I", len(audiofiles)))
+        f.write(struct.pack("<Qff", pos[0], x, y))
+      f.write(struct.pack("<I", len(audiofiles)))
       for af in audiofiles:
-        f.write(struct.pack("LL", af[0], len(af[1])))
+        f.write(struct.pack("<QQ", af[0], len(af[1])))
         f.write(zlib.compress(af[1]))
   f.flush()
   f.close()
@@ -89,30 +89,30 @@ def openDCB(fname = 'save.dcb', win_sz = (640,480)):
   if f.read(8) != DCB_MAGIC_NUMBER:
     raise AttributeError("Magic number does not match.")
 
-  v = struct.unpack("III", f.read(4 + 4 + 4))  # file version
+  v = struct.unpack("<III", f.read(4 + 4 + 4))  # file version
   if v[0] == 0:
     if v[1] == 1:
       trace = []
       positions = []
       audiofiles = []
-      num_slides = struct.unpack("I", f.read(4))[0]
+      num_slides = struct.unpack("<I", f.read(4))[0]
       for slide_i in range(num_slides):
-        t, num_strokes = struct.unpack("LI", f.read(8 + 4))
+        t, num_strokes = struct.unpack("<QI", f.read(8 + 4))
         trace.append(t / 1000.0)
         trace.append([])
         for stroke_i in range(num_strokes):
           trace[-1].append([])
-          num_points, r, g, b = struct.unpack("Ifff", f.read(4 * 4))
+          num_points, r, g, b = struct.unpack("<Ifff", f.read(4 * 4))
           for point_i in range(num_points):
-            ts, x, y, th = struct.unpack("Lfff", f.read(8 + 4 * 3))
+            ts, x, y, th = struct.unpack("<Qfff", f.read(8 + 4 * 3))
             trace[-1][-1].append((ts / 1000.0, (x * win_sz[0], y * win_sz[1]), th * math.sqrt(win_sz[0] * win_sz[0] + win_sz[1] * win_sz[1]), (r,g,b), win_sz))
-      num_positions = struct.unpack("I", f.read(4))[0]
+      num_positions = struct.unpack("<I", f.read(4))[0]
       for pos_i in range(num_positions):
-        t, x, y = struct.unpack("Lff", f.read(8 + 4 + 4))
+        t, x, y = struct.unpack("<Qff", f.read(8 + 4 + 4))
         positions.append((t, (x * win_sz[0], y * win_sz[1]), win_sz))
-      num_afs = struct.unpack("I", f.read(4))[0]
+      num_afs = struct.unpack("<I", f.read(4))[0]
       for af_i in range(num_afs):
-        t, sz = struct.unpack("LL", f.read(8 + 8))
+        t, sz = struct.unpack("<QQ", f.read(8 + 8))
         audiofiles.append([t, zlib.uncompress(f.read(sz))])
   f.close()
   return trace, positions, audiofiles
