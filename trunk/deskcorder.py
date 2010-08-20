@@ -214,6 +214,7 @@ class Canvas(gtk.DrawingArea):
     self.trace = [time.time(), []]
     self.positions = []
     self.dirty = False
+    self.frozen = False
 
   def draw(self, color, r, pos1, pos2=None, pos3=None):
     self.raster_cr.set_source_rgba(color[0], color[1], color[2], 1.0)
@@ -359,7 +360,12 @@ class Deskcorder:
     self.root.show()
     try:
       if fname != None:
-        self.openDCX(fname)
+        if fname.endswith(".dcb"):
+          self.openDCB(fname)
+        elif fname.endswith(".dcx"):
+          self.openDCX(fname)
+        else:
+          self.openDCT(fname)
     except IOError:
       print 'No such file: "%s"' % fname
 
@@ -372,9 +378,9 @@ class Deskcorder:
   def reset(self):
     '''Clears the state of the canvas and audio, as if the system had just
     started.'''
-    if not self.canvas.dirty or self.dirtyOK():
+    if not self.canvas.dirty or self.dirty_ok():
       self.canvas.reset()
-      self.audiosavior.data = []
+      self.audiosavior.reset()
 
   def record(self):
     '''Starts the mic recording.'''
@@ -420,8 +426,6 @@ class Deskcorder:
 
     now = time.time()
 
-    print "video: %fs" % (now - self.play_time)
-    print "audio: %fs" % self.audiosavior.get_s_played()
     audio_time = self.audiosavior.get_s_played()
     if audio_time >= 0:
       dt + audio_time - now + self.play_time
@@ -541,7 +545,7 @@ class Deskcorder:
   # ------------------------------ File I/O -------------------------------- #
   ############################################################################
 
-  def save(self, fname = None, format = "xml"):
+  def save(self, fname = None):
     if fname == None: fname = 'save.dcx'
     fcd = gtk.FileChooserDialog('Choose a file to save', None,
         gtk.FILE_CHOOSER_ACTION_SAVE, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
@@ -550,25 +554,38 @@ class Deskcorder:
     fcd.set_current_folder('data')
     fcd.set_current_name(fname)
     if fcd.run() == gtk.RESPONSE_ACCEPT:
-      self.saveDCX(fcd.get_filename())
+      fname = fcd.get_filename()
+      if fname.lower().endswith(".dcb"):
+        self.saveDCB(fname)
+      elif fname.lower().endswith(".dcx"):
+        self.saveDCX(fname)
+      elif fname.lower().endswith(".dct"):
+        self.saveDCT(fname)
+      else:
+        self.saveDCB(fname)
       self.canvas.dirty = False
     fcd.destroy()
 
-  def saveDCX(self, fname = "strokes.wbx"):
+  def saveDCX(self, fname = "strokes.dcx"):
     if self.audioenabled:
       recorder.saveDCX(fname, self.canvas.trace, self.canvas.positions,
           self.audiosavior.data)
     else:
       recorder.saveDCX(fname, self.canvas.trace, self.canvas.positions)
 
-  def saveDCT(self, fname = "strokes.wbt"):
+  def saveDCT(self, fname = "strokes.dct"):
     recorder.saveDCT(self.canvas.trace, fname)
 
-  def saveDCR(self, fname = "strokes.wbr"):
-    raise NotImplementedError("I don't know how to save raw files yet ...")
+  def saveDCB(self, fname = "strokes.dcb"):
+    recorder.saveDCB(fname, self.canvas.trace, self.canvas.positions, self.audiosavior.data)
 
-  def open(self, fname = None, format = 'xml'):
-    if self.canvas.dirty and not self.dirtyOK(): return
+  def errorMessageDialog(self, msg):
+    d = gtk.MessageDialog(None, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK, msg)
+    d.run()
+    d.destroy()
+
+  def open(self, fname = None):
+    if self.canvas.dirty and not self.dirty_ok(): return
     if fname == None: fname = 'save.dcx'
     fcd = gtk.FileChooserDialog('Choose a file to save', None,
         gtk.FILE_CHOOSER_ACTION_OPEN, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
@@ -577,9 +594,23 @@ class Deskcorder:
     fcd.set_current_folder('data')
     fcd.set_current_name(fname)
     if fcd.run() == gtk.RESPONSE_ACCEPT:
-      self.openDCX(fcd.get_filename())
+      fname = fcd.get_filename()
+      if fname.lower().endswith(".dcb"):
+        self.openDCB(fname)
+      elif fname.lower().endswith('.dcx'):
+        self.openDCX(fname)
+      elif fname.lower().endswith('.dct'):
+        self.openDCT(fname)
+      else:
+        errorMessageDialog('''Cannot detect file type.  Please try another
+            file or rename to have the appropriate extension.''')
+        self.openDCB(fname)
       self.canvas.dirty = False
     fcd.destroy()
+
+  def openDCB(self, fname = 'save.dcb'):
+    self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
+        recorder.openDCB(fname, self.canvas.size)
 
   def openDCX(self, fname = 'save.dcx'):
     self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
@@ -589,7 +620,7 @@ class Deskcorder:
     self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
         recorder.openDCT(fname, self.canvas.size)
 
-  def dirtyOK(self):
+  def dirty_ok(self):
     d = gtk.MessageDialog(None, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_YES_NO,
         "You have unsaved changes.  Are you sure you want to continue?")
     ok = (d.run() == gtk.RESPONSE_YES)
@@ -609,8 +640,8 @@ if __name__ == '__main__':
       print 'Usage %s [-A|--no-audio]'
     elif sys.argv[1] == '-A' or sys.argv[1] == '--no-audio':
       audio = False
-    elif sys.argv[1].startswith('--open-dcx='):
-      fname = sys.argv[1][11:]
+    elif sys.argv[1].startswith('--open='):
+      fname = sys.argv[1][7:]
     else:
       print 'Unrecognized command: "%s"' % sys.argv[1]
   d = Deskcorder("layout.glade", audio)
