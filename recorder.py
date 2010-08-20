@@ -1,6 +1,8 @@
 import math
 import base64
 import xml.dom.minidom
+import struct  # for binary conversions
+import zlib    # to compress audio data
 
 # Should appear on first line, to denote which version was used.
 WB_REC_VERSION_PREFIX = 'WB v'
@@ -13,7 +15,13 @@ FORMATS = {'dcx': "Whiteboard XML file",
            'dct': "Whiteboard text file",
            'dcr': "Whiteboard raw file"}
 
+# Magic number to appear at the beginning of every DCB file.
+DCB_MAGIC_NUMBER = '\x42\xfa\x32\xba\x22\xaa\xaa\xbb'
 
+
+def VersionError():
+  def __init__(self, v):
+    Exception.__init__(self, "Could not import version %d.%d.%d" % v)
 
 ############################################################################
 # -------------------- Reading and writing functions --------------------- #
@@ -42,12 +50,78 @@ def read(fname):
   except StopIteration:
     print '''Warning: %s is empty.''' % fname
 
+def saveDCB(fname = 'save.dcb', trace = [], positions = [], audiofiles = []):
+  '''Saves DCB-v0.1.1'''
+  f = open(fname, 'wb')
+  f.write(DCB_MAGIC_NUMBER)
+  f.write(struct.pack("III", 0, 1, 1))  # file version
+  f.write(struct.pack("I", len(trace) / 2))
+  for slide in trace:
+    if type(slide) == float:
+      f.write(struct.pack("L", int(slide * 1000)))
+    else:
+      f.write(struct.pack("I", len(slide)))
+      for stroke in slide:
+        f.write(struct.pack("I", len(stroke)))
+        if len(stroke) > 0:
+          f.write(struct.pack("fff", stroke[0][3][0], stroke[0][3][1], stroke[0][3][2]))
+          for point in stroke:
+            x = point[1][0] / float(point[4][0])
+            y = point[1][1] / float(point[4][1])
+            thickness = point[2] / (math.sqrt(point[4][0] * point[4][0] +
+                                              point[4][1] * point[4][1]))
+            f.write(struct.pack("Lfff", point[0] * 1000, x, y, thickness))
+      f.write(struct.pack("I", len(positions)))
+      for pos in positions:
+        x = pos[1][0] / float(pos[2][0])
+        y = pos[1][1] / float(pos[2][1])
+        f.write(struct.pack("Lff", pos[0], x, y))
+      f.write(struct.pack("I", len(audiofiles)))
+      for af in audiofiles:
+        f.write(struct.pack("LL", af[0], len(af[1])))
+        f.write(zlib.compress(af[1]))
+  f.flush()
+  f.close()
+
+def openDCB(fname = 'save.dcb', win_sz = (640,480)):
+  '''Saves DCB-v0.1.1'''
+  f = open(fname, 'rb')
+  if f.read(8) != DCB_MAGIC_NUMBER:
+    raise AttributeError("Magic number does not match.")
+
+  v = struct.unpack("III", f.read(4 + 4 + 4))  # file version
+  if v[0] == 0:
+    if v[1] == 1:
+      trace = []
+      positions = []
+      audiofiles = []
+      num_slides = struct.unpack("I", f.read(4))[0]
+      for slide_i in range(num_slides):
+        t, num_strokes = struct.unpack("LI", f.read(8 + 4))
+        trace.append(t / 1000.0)
+        trace.append([])
+        for stroke_i in range(num_strokes):
+          trace[-1].append([])
+          num_points, r, g, b = struct.unpack("Ifff", f.read(4 * 4))
+          for point_i in range(num_points):
+            ts, x, y, th = struct.unpack("Lfff", f.read(8 + 4 * 3))
+            trace[-1][-1].append((ts / 1000.0, (x * win_sz[0], y * win_sz[1]), th * math.sqrt(win_sz[0] * win_sz[0] + win_sz[1] * win_sz[1]), (r,g,b), win_sz))
+      num_positions = struct.unpack("I", f.read(4))[0]
+      for pos_i in range(num_positions):
+        t, x, y = struct.unpack("Lff", f.read(8 + 4 + 4))
+        positions.append((t, (x * win_sz[0], y * win_sz[1]), win_sz))
+      num_afs = struct.unpack("I", f.read(4))[0]
+      for af_i in range(num_afs):
+        t, sz = struct.unpack("LL", f.read(8 + 8))
+        audiofiles.append([t, zlib.uncompress(f.read(sz))])
+  f.close()
+  return trace, positions, audiofiles
+
 def saveDCX(fname = 'save.dcx', trace = [], positions = [], audiofiles = []):
-  '''Saves DCX-v0.1
+  '''Saves DCX-v0.1.1
   @trace: A complex list.  See the Canvas object for details.
   @positions: A list of (t,(x,y),(w,h)) tuples
   @audiofiles: A list of (t,data) tuples'''
-  # TODO test
   f = open(fname, 'w')
   f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
   f.write('<document version="0.1.1">\n')

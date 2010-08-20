@@ -40,8 +40,19 @@ class AudioSavior:
 
   def print_info(self):
     print 'Card name: %s' % a.inp.cardname()
-    print 'PCM mode: %d'  % a.inp.pcmmode()
-    print 'PCM type: %d'  % a.inp.pcmtype()
+    print ' PCM mode: %d' % a.inp.pcmmode()
+    print ' PCM type: %d' % a.inp.pcmtype()
+
+  def reset(self):
+    self.data = []
+    self.play_start = None
+    self.recording = False
+    self.paused = False
+
+  def load_data(self, data, format):
+    self.data = data
+    self.format = format
+    self.out.setformat(format)
 
   def record(self, t = time.time()):
     '''Start recording.  This will not block.  It init's the recording process.
@@ -49,36 +60,33 @@ class AudioSavior:
     if self.is_playing():
       raise InvalidOperationError('Already playing.')
 
-    print 'recording'
     self.inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE,alsaaudio.PCM_NONBLOCK)
     self.inp.setchannels(self.channels)
     self.inp.setrate(self.rate)
     self.inp.setperiodsize(self.period_size)
     self.inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
-    self.data.append([t, ''])
+    self.data.append([t, []])
     self.recording = True
     gobject.timeout_add(100, self.record_tick)
 
   def record_tick(self):
-    print 'tick'
     while self.recording:
       l,data = self.inp.read()
       # Drops 0-length data and data recorded while this is paused.
       if l > 0:
         if not self.paused:
-          print 'recorded %d bytes of data' % len(data)
-          self.data[-1][1] += data
-          print '  --> %d bytes in buffer' % len(self.data[-1][1])
+          self.data[-1][1].append(data)
       else:
         return True
     else:
+      # turn data into one large string instead of several small ones.
+      self.data[-1][1] = reduce(lambda a,b: a+b, self.data[-1][1])
       return False
 
   def play(self):
     if len(self.data) == 0 or len(self.data[0][1]) == 0:
       return
 
-    print 'playing'
     self.play_start = time.time()
     self.play_iter1 = 0
     self.play_iter2 = self.period_size
@@ -86,10 +94,8 @@ class AudioSavior:
     gobject.timeout_add(100, self.play_tick)
 
   def play_tick(self):
-    print 'tick'
     if self.is_playing():
       if self.paused: return True
-      print "%.3fs played" % self.get_s_played()
       # This has the effect of a do-while loop that loops until no more data
       # can be written to the speakers.
       while True:
@@ -123,15 +129,12 @@ class AudioSavior:
       return -1
 
   def pause(self):
-    print 'paused'
     self.paused = True
 
   def unpause(self):
-    print 'unpaused'
     self.paused = False
 
   def stop(self):
-    print 'stopped'
     self.paused = False
     self.recording = False
     self.play_start = None
@@ -175,9 +178,7 @@ class AudioSavior:
     xmlDoc = xml.dom.minidom.parseString(tag)
     afs = xmlDoc.getElementsByTagName("audiofile")
     if len(afs) == 0:
-      raise 'No <audio> tags found.'
-    elif len(afs) > 1:
-      print 'Warning: expected one <audio> tag but got %d.  Using first.' % len(tags)
+      raise IOError('No <audiofile> tags found.')
 
     self.data = []
     for af in afs:
