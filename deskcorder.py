@@ -14,7 +14,7 @@ import os
 import signal
 import recorder
 try:
-  import audiosavior
+  import alsa
   audio = True
 except ImportError:
   audio = False
@@ -94,7 +94,7 @@ class GtkCanvas(gtk.DrawingArea):
 
     # This won't accept mouse events when frozen.  Useful for when the
     # Deskcorder is playing back the contents of the GtkCanvas and the
-    # AudioSavior.
+    # Audio.
     self.frozen = False
 
     # This is a very loaded list of lists.  At the topmost level, this is a
@@ -317,7 +317,7 @@ class Deskcorder:
     # Set up audio (or not).
     self.audioenabled = audioenabled
     if audioenabled:
-      self.audiosavior = audiosavior.AudioSavior()
+      self.audio = alsa.Audio()
       self.record_button.connect("toggled", lambda x: self.record())
     else:
       print "Audio disabled."
@@ -409,7 +409,7 @@ class Deskcorder:
     started.'''
     if not self.canvas.dirty or self.dirty_ok():
       self.canvas.reset()
-      self.audiosavior.reset()
+      self.audio.reset()
 
   def is_recording(self):
     return self.record_button.get_active()
@@ -418,11 +418,11 @@ class Deskcorder:
     '''Starts the mic recording.'''
     if self.is_recording():
       try:
-        self.audiosavior.record()
+        self.audio.record()
       except recorder.InvalidOperationError:
         self.record_button.set_active(False)
     else:
-      self.audiosavior.stop()
+      self.audio.stop()
 
   def is_playing(self):
     '''Determines if this is playing or not.'''
@@ -445,7 +445,7 @@ class Deskcorder:
 
     self.canvas.freeze()
     if self.audioenabled:
-      self.audiosavior.play_init()
+      self.audio.play_init()
     self.play_time = t
     self.slide_i = 0
     self.curve_i = 0
@@ -466,11 +466,11 @@ class Deskcorder:
 
     now = time.time()
 
-    if self.audioenabled and self.audiosavior.is_playing():
-      a_start = self.audiosavior.get_current_audio_start_time()
-      a_time = self.audiosavior.get_s_played()
+    if self.audioenabled and self.audio.is_playing():
+      a_start = self.audio.get_current_audio_start_time()
+      a_time = self.audio.get_s_played()
       if a_start >= 0:
-        self.audiosavior.play_tick(now - dt)
+        self.audio.play_tick(now - dt)
         if a_time >= 0:
           dt = a_start + dt + a_time - now + dt
 
@@ -509,7 +509,7 @@ class Deskcorder:
         print 'Warning, unknown type: %s' % type(slide)
 
       if not self.play_iters_inc():
-        if not self.audioenabled or self.audiosavior.get_current_audio_start_time() < 0:
+        if not self.audioenabled or self.audio.get_current_audio_start_time() < 0:
           self.stop()
           return False
         return True
@@ -546,13 +546,13 @@ class Deskcorder:
         self.last_pause = t
         self.pause_button.set_active(True)
         if self.audioenabled:
-          self.audiosavior.pause()
+          self.audio.pause()
       else:
         self.break_times.append((self.last_pause, t))
         self.last_pause = None
         self.pause_button.set_active(False)
         if self.audioenabled:
-          self.audiosavior.unpause()
+          self.audio.unpause()
     else:
       self.pause_button.set_active(False)
 
@@ -569,15 +569,15 @@ class Deskcorder:
       self.stop()
 
   def check_done(self):
-    if not self.audiosavior.is_playing():
+    if not self.audio.is_playing():
       self.stop()
       return False
     return True
 
   def stop(self):
     if self.audioenabled:
-      self.audiosavior.stop()
-      self.audiosavior.compress_data()
+      self.audio.stop()
+      self.audio.compress_data()
     if self.is_paused():
       self.pause(time.time())
     self.record_button.set_active(False)
@@ -587,7 +587,7 @@ class Deskcorder:
     self.play_timer_id = None
     self.last_pause = None
     self.break_times = []
-    self.audiosavior.stop()
+    self.audio.stop()
 
 
 
@@ -623,7 +623,7 @@ class Deskcorder:
   def get_audio_data(self):
     '''Convenience function that returns the audio data or [] if audio is
     disabled.'''
-    return self.audiosavior.data if self.audioenabled else []
+    return self.audio.data if self.audioenabled else []
 
   def save_dcx(self, fname = "strokes.dcx"):
     recorder.save_dcx(fname, self.canvas.trace, self.canvas.positions, self.get_audio_data())
@@ -666,15 +666,15 @@ class Deskcorder:
       fcd.destroy()
 
   def load_dcb(self, fname = 'save.dcb'):
-    self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
+    self.canvas.trace, self.canvas.positions, self.audio.data = \
         recorder.load_dcb(fname, self.canvas.size)
 
   def load_dcx(self, fname = 'save.dcx'):
-    self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
+    self.canvas.trace, self.canvas.positions, self.audio.data = \
         recorder.load_dcx(fname, self.canvas.size)
 
   def load_dct(self, fname = 'save.dcx'):
-    self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
+    self.canvas.trace, self.canvas.positions, self.audio.data = \
         recorder.load_dct(fname, self.canvas.size)
 
   def dirty_ok(self):

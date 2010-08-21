@@ -11,7 +11,7 @@ class InvalidOperationError(RuntimeError):
   def __init__(self, msg):
     RuntimeError.__init__(self, msg)
 
-class AudioSavior:
+class Audio:
   def __init__(self):
     self.data = []  # K.I.S.S.  Data stored as a string.
     # next version: store an array of strings.  Do smart things to determine
@@ -57,7 +57,7 @@ class AudioSavior:
 
   def record(self, t = None):
     '''Start recording.  This will not block.  It init's the recording process.
-    This AudioSavior will continue recording until stop() gets called.'''
+    This Audio will continue recording until stop() gets called.'''
     if self.is_playing():
       raise InvalidOperationError('Already playing.')
 
@@ -206,7 +206,7 @@ class AudioSavior:
 
 if __name__ == "__main__":
   import os
-  a = AudioSavior()
+  a = Audio()
 
   if len(sys.argv) > 1 and sys.argv[1] == '--play':
     a.open()
