@@ -57,11 +57,30 @@ except ImportError:
 #        times.append(s)
 #    return times
 
-class Canvas(gtk.DrawingArea):
+#class State:
+#  class Iter:
+#    def __init__(self, i = 0, j = 0, k = 0):
+#      self.i = i
+#      self.j = j
+#      self.k = k
+#
+#  def __init__(self, data = []):
+#    '''Initialize a blank state object.  If you have internal data (formerly
+#    known as a "trace"), then you can just pass that here.'''
+#    if type(data) != list:
+#      raise :e 
+#    self.data = data
+#
+#  def __getitem__(self, it = Iter()):
+#    pass
+#
+#  def __delitem
+
+
+class GtkCanvas(gtk.DrawingArea):
   def __init__(self):
     gtk.DrawingArea.__init__(self)
 
-    self.device = 0
     self.radius = 3.0
     self.drawing = False
     self.size = None
@@ -74,7 +93,7 @@ class Canvas(gtk.DrawingArea):
     self.dirty = False
 
     # This won't accept mouse events when frozen.  Useful for when the
-    # Deskcorder is playing back the contents of the Canvas and the
+    # Deskcorder is playing back the contents of the GtkCanvas and the
     # AudioSavior.
     self.frozen = False
 
@@ -105,6 +124,17 @@ class Canvas(gtk.DrawingArea):
     self.connect("button-press-event", self.gtk_button_press)
     self.connect("button-release-event", self.gtk_button_release)
     self.set_size_request(800,600)
+
+  def get_time_of_first_event(self):
+    for e in trace[1:]:
+      if type(e) == list:
+        if len(e) > 0:
+          for stroke in e:
+            if len(stroke) > 0:
+              return stroke[0][0]
+      else:
+        return e
+    return -1
 
   def freeze(self):
     self.frozen = True
@@ -141,18 +171,17 @@ class Canvas(gtk.DrawingArea):
         )
     self.refresh()
 
-  def GetPressure(self):
-    dev = gtk.gdk.devices_list()[self.device]
-    trace = dev.get_state(self.window)
-    return dev.get_axis(trace[0], gtk.gdk.AXIS_PRESSURE)
+  def get_pressure(self, device):
+    trace = device.get_state(self.window)
+    return device.get_axis(trace[0], gtk.gdk.AXIS_PRESSURE)
 
   def gtk_motion(self, widget, event):
     if not self.frozen:
       pos = event.get_coords()
       if self.drawing:
         self.dirty = True
-        p = self.GetPressure()
-        if p == None:
+        p = self.get_pressure(event.device)
+        if p is None:
           p = 1.0
         r = (p * 2 + 0.2)*self.radius
         if len(self.trace[-1][-1]) > 1:
@@ -269,7 +298,7 @@ class Deskcorder:
     self.root = self.glade_tree.get_widget("mainwindow")
 
     # Add the canvas, too.
-    self.canvas = Canvas()
+    self.canvas = GtkCanvas()
     self.canvas.show()
     self.glade_tree.get_widget("vbox1").add(self.canvas)
 
@@ -281,7 +310,7 @@ class Deskcorder:
     self.play_button = self.glade_tree.get_widget("play")
     self.pause_button = self.glade_tree.get_widget("pause")
     self.stop_button = self.glade_tree.get_widget("stop")
-    self.play_button.connect("clicked", lambda x: self.play(time.time()))
+    self.play_button.connect("toggled", lambda x: self.play(time.time()))
     self.pause_button.connect("toggled", lambda x: self.pause(time.time()))
     self.stop_button.connect("clicked", lambda x: self.stop())
 
@@ -361,13 +390,13 @@ class Deskcorder:
     try:
       if fname != None:
         if fname.endswith(".dcb"):
-          self.openDCB(fname)
+          self.load_dcb(fname)
         elif fname.endswith(".dcx"):
-          self.openDCX(fname)
+          self.load_dcx(fname)
         else:
-          self.openDCT(fname)
-    except IOError:
-      print 'No such file: "%s"' % fname
+          self.load_dct(fname)
+    except IOError as e:
+      print 'Error: %s"' % e.message
 
     try:
       gtk.main()
@@ -382,9 +411,12 @@ class Deskcorder:
       self.canvas.reset()
       self.audiosavior.reset()
 
+  def is_recording(self):
+    return self.record_button.get_active()
+
   def record(self):
     '''Starts the mic recording.'''
-    if self.record_button.get_active():
+    if self.is_recording():
       try:
         self.audiosavior.record()
       except recorder.InvalidOperationError:
@@ -397,7 +429,15 @@ class Deskcorder:
     return self.play_time is not None
 
   def play(self, t):
-    '''start playing what's in this file.'''
+    '''Start/stop playing what's in this file.'''
+    if not self.play_button.get_active():
+      self.stop()
+      return
+
+    if self.is_recording():
+      self.stop()
+      self.play_button.set_active(True)
+
     if self.is_playing():
       if self.is_paused():
         self.pause(t)
@@ -405,7 +445,7 @@ class Deskcorder:
 
     self.canvas.freeze()
     if self.audioenabled:
-      self.audiosavior.play()
+      self.audiosavior.play_init()
     self.play_time = t
     self.slide_i = 0
     self.curve_i = 0
@@ -426,9 +466,13 @@ class Deskcorder:
 
     now = time.time()
 
-    audio_time = self.audiosavior.get_s_played()
-    if audio_time >= 0:
-      dt + audio_time - now + self.play_time
+    if self.audioenabled and self.audiosavior.is_playing():
+      a_start = self.audiosavior.get_current_audio_start_time()
+      a_time = self.audiosavior.get_s_played()
+      if a_start >= 0:
+        self.audiosavior.play_tick(now - dt)
+        if a_time >= 0:
+          dt = a_start + dt + a_time - now + dt
 
     # I'm simulating a do-while loop here.  This one is basically:
     #  1. While we still have stuff to iterate over, iterate.
@@ -465,8 +509,11 @@ class Deskcorder:
         print 'Warning, unknown type: %s' % type(slide)
 
       if not self.play_iters_inc():
-        self.done()
-        return False
+        if not self.audioenabled or self.audiosavior.get_current_audio_start_time() < 0:
+          self.stop()
+          return False
+        return True
+
 
   def play_iters_inc(self):
     '''Increments all the iterators that have to do with the playing
@@ -528,10 +575,13 @@ class Deskcorder:
     return True
 
   def stop(self):
-    if self.audioenabled: self.audiosavior.stop()
+    if self.audioenabled:
+      self.audiosavior.stop()
+      self.audiosavior.compress_data()
     if self.is_paused():
       self.pause(time.time())
     self.record_button.set_active(False)
+    self.play_button.set_active(False)
     self.canvas.unfreeze()
     self.play_time = None
     self.play_timer_id = None
@@ -545,82 +595,90 @@ class Deskcorder:
   # ------------------------------ File I/O -------------------------------- #
   ############################################################################
 
-  def save(self, fname = None):
-    if fname == None: fname = 'save.dcx'
-    fcd = gtk.FileChooserDialog('Choose a file to save', None,
-        gtk.FILE_CHOOSER_ACTION_SAVE, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
-          gtk.STOCK_SAVE, gtk.RESPONSE_ACCEPT))
-    fcd.set_do_overwrite_confirmation(True)
-    fcd.set_current_folder('data')
-    fcd.set_current_name(fname)
-    if fcd.run() == gtk.RESPONSE_ACCEPT:
-      fname = fcd.get_filename()
-      if fname.lower().endswith(".dcb"):
-        self.saveDCB(fname)
-      elif fname.lower().endswith(".dcx"):
-        self.saveDCX(fname)
+  def save(self, fname = 'save.dcb', graphical = True):
+    if graphical:
+      if self.is_recording(): self.record()
+      fcd = gtk.FileChooserDialog('Choose a file to save', None,
+          gtk.FILE_CHOOSER_ACTION_SAVE, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+            gtk.STOCK_SAVE, gtk.RESPONSE_ACCEPT))
+      fcd.set_do_overwrite_confirmation(True)
+      fcd.set_current_folder('saves')
+      fcd.set_current_name(fname)
+
+    if not graphical or fcd.run() == gtk.RESPONSE_ACCEPT:
+      if graphical:
+        fname = fcd.get_filename()
+
+      if fname.lower().endswith(".dcx"):
+        self.save_dcx(fname)
       elif fname.lower().endswith(".dct"):
-        self.saveDCT(fname)
+        self.save_dct(fname)
       else:
-        self.saveDCB(fname)
+        self.save_dcb(fname)
       self.canvas.dirty = False
-    fcd.destroy()
 
-  def saveDCX(self, fname = "strokes.dcx"):
-    if self.audioenabled:
-      recorder.saveDCX(fname, self.canvas.trace, self.canvas.positions,
-          self.audiosavior.data)
-    else:
-      recorder.saveDCX(fname, self.canvas.trace, self.canvas.positions)
+    if graphical:
+      fcd.destroy()
 
-  def saveDCT(self, fname = "strokes.dct"):
-    recorder.saveDCT(self.canvas.trace, fname)
+  def get_audio_data(self):
+    '''Convenience function that returns the audio data or [] if audio is
+    disabled.'''
+    return self.audiosavior.data if self.audioenabled else []
 
-  def saveDCB(self, fname = "strokes.dcb"):
-    recorder.saveDCB(fname, self.canvas.trace, self.canvas.positions, self.audiosavior.data)
+  def save_dcx(self, fname = "strokes.dcx"):
+    recorder.save_dcx(fname, self.canvas.trace, self.canvas.positions, self.get_audio_data())
+
+  def save_dct(self, fname = "strokes.dct"):
+    recorder.save_dct(fname, self.canvas.trace)
+
+  def save_dcb(self, fname = "strokes.dcb"):
+    recorder.save_dcb(fname, self.canvas.trace, self.canvas.positions, self.get_audio_data())
 
   def errorMessageDialog(self, msg):
     d = gtk.MessageDialog(None, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_OK, msg)
     d.run()
     d.destroy()
 
-  def open(self, fname = None):
-    if self.canvas.dirty and not self.dirty_ok(): return
-    if fname == None: fname = 'save.dcx'
-    fcd = gtk.FileChooserDialog('Choose a file to save', None,
-        gtk.FILE_CHOOSER_ACTION_OPEN, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
-          gtk.STOCK_OPEN, gtk.RESPONSE_ACCEPT))
-    fcd.set_do_overwrite_confirmation(True)
-    fcd.set_current_folder('data')
-    fcd.set_current_name(fname)
-    if fcd.run() == gtk.RESPONSE_ACCEPT:
-      fname = fcd.get_filename()
-      if fname.lower().endswith(".dcb"):
-        self.openDCB(fname)
-      elif fname.lower().endswith('.dcx'):
-        self.openDCX(fname)
+  def open(self, fname = 'save.dcb', graphical = True):
+    if graphical:
+      if self.canvas.dirty and not self.dirty_ok(): return
+      if fname == None: fname = 'save.dcx'
+      fcd = gtk.FileChooserDialog('Choose a file to save', None,
+          gtk.FILE_CHOOSER_ACTION_OPEN, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+            gtk.STOCK_OPEN, gtk.RESPONSE_ACCEPT))
+      fcd.set_do_overwrite_confirmation(True)
+      fcd.set_current_folder('saves')
+      fcd.set_current_name(fname)
+
+    if not graphical or fcd.run() == gtk.RESPONSE_ACCEPT:
+      if graphical:
+        fname = fcd.get_filename()
+
+      if fname.lower().endswith('.dcx'):
+        self.load_dcx(fname)
       elif fname.lower().endswith('.dct'):
-        self.openDCT(fname)
+        self.load_dct(fname)
       else:
-        errorMessageDialog('''Cannot detect file type.  Please try another
-            file or rename to have the appropriate extension.''')
-        self.openDCB(fname)
+        self.load_dcb(fname)
       self.canvas.dirty = False
-    fcd.destroy()
 
-  def openDCB(self, fname = 'save.dcb'):
-    self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
-        recorder.openDCB(fname, self.canvas.size)
+    if graphical:
+      fcd.destroy()
 
-  def openDCX(self, fname = 'save.dcx'):
+  def load_dcb(self, fname = 'save.dcb'):
     self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
-        recorder.openDCX(fname, self.canvas.size)
+        recorder.load_dcb(fname, self.canvas.size)
 
-  def openDCT(self, fname = 'save.dcx'):
+  def load_dcx(self, fname = 'save.dcx'):
     self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
-        recorder.openDCT(fname, self.canvas.size)
+        recorder.load_dcx(fname, self.canvas.size)
+
+  def load_dct(self, fname = 'save.dcx'):
+    self.canvas.trace, self.canvas.positions, self.audiosavior.data = \
+        recorder.load_dct(fname, self.canvas.size)
 
   def dirty_ok(self):
+    '''Checks if it's okay that the canvas has unsaved changes on it.'''
     d = gtk.MessageDialog(None, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_YES_NO,
         "You have unsaved changes.  Are you sure you want to continue?")
     ok = (d.run() == gtk.RESPONSE_YES)

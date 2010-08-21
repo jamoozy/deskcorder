@@ -258,7 +258,7 @@
               </packing>
             </child>
             <child>
-              <widget class="GtkToolButton" id="play">
+              <widget class="GtkToggleToolButton" id="play">
                 <property name="visible">True</property>
                 <property name="label" translatable="yes">play</property>
                 <property name="use_underline">True</property>

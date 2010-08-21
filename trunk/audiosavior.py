@@ -8,7 +8,8 @@ import xml.dom.minidom
 import gobject
 
 class InvalidOperationError(RuntimeError):
-  pass
+  def __init__(self, msg):
+    RuntimeError.__init__(self, msg)
 
 class AudioSavior:
   def __init__(self):
@@ -54,12 +55,13 @@ class AudioSavior:
     self.format = format
     self.out.setformat(format)
 
-  def record(self, t = time.time()):
+  def record(self, t = None):
     '''Start recording.  This will not block.  It init's the recording process.
     This AudioSavior will continue recording until stop() gets called.'''
     if self.is_playing():
       raise InvalidOperationError('Already playing.')
 
+    if t is None: t = time.time()
     self.inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE,alsaaudio.PCM_NONBLOCK)
     self.inp.setchannels(self.channels)
     self.inp.setrate(self.rate)
@@ -80,25 +82,33 @@ class AudioSavior:
         return True
     else:
       # turn data into one large string instead of several small ones.
-      self.data[-1][1] = reduce(lambda a,b: a+b, self.data[-1][1])
+      self.compress_data()
       return False
+
+  def compress_data(self):
+    if len(self.data) > 0 and len(self.data[-1][1]) > 0 and type(self.data[-1][1]) != str:
+      self.data[-1][1] = reduce(lambda a,b: a+b, self.data[-1][1])
 
   def play(self):
     if len(self.data) == 0 or len(self.data[0][1]) == 0:
       return
+    self.play_init()
+    gobject.timeout_add(100, self.play_tick)
 
+  def play_init(self):
     self.play_start = time.time()
     self.play_iter1 = 0
     self.play_iter2 = self.period_size
     self.data_iter = 0
-    gobject.timeout_add(100, self.play_tick)
 
-  def play_tick(self):
+  def play_tick(self, ttpt = None):
+    '''ttpt == "time to play to" so that things will only play when they
+    should.'''
     if self.is_playing():
       if self.paused: return True
       # This has the effect of a do-while loop that loops until no more data
       # can be written to the speakers.
-      while True:
+      while ttpt is None or ttpt >= self.data[self.data_iter][0]:
         data = self.data[self.data_iter][1][self.play_iter1:self.play_iter2]
         dt = time.time() - self.data[self.data_iter][0]
         if self.out.write(data) != 0:
@@ -115,6 +125,7 @@ class AudioSavior:
             self.play_iter2 = len(self.data[self.data_iter][1])
         else:
           return self.is_playing()
+      return self.is_playing()
     else:
       return False
 
@@ -123,9 +134,18 @@ class AudioSavior:
 
   def get_s_played(self):
     '''Computes and returns number of seconds played in this recording.'''
-    if self.is_playing():
+    if self.is_playing() and len(self.data) > 0 and self.play_iter1 < len(self.data[self.data_iter][1]):
       return self.play_iter1 / float(self.bytes_per_second)
     else:
+      return -1
+
+  def get_time_of_first_event(self):
+    return self.data[0][0] if len(self.data) > 0 else -1
+
+  def get_current_audio_start_time(self):
+    try:
+      return self.data[self.data_iter][0]
+    except IndexError:
       return -1
 
   def pause(self):

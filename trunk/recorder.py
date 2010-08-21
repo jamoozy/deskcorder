@@ -3,6 +3,7 @@ import base64
 import xml.dom.minidom
 import struct  # for binary conversions
 import zlib    # to compress audio data
+import wave
 
 # Should appear on first line, to denote which version was used.
 WB_REC_VERSION_PREFIX = 'WB v'
@@ -19,39 +20,73 @@ FORMATS = {'dcx': "Whiteboard XML file",
 DCB_MAGIC_NUMBER = '\x42\xfa\x32\xba\x22\xaa\xaa\xbb'
 
 
-def VersionError():
+def VersionError(Exception):
+  '''Raised when an unexpected version is encountered by one of the load
+  functions.'''
   def __init__(self, v):
     Exception.__init__(self, "Could not import version %d.%d.%d" % v)
+
+def FormatError(Exception):
+  '''Raised when an unrecoverable formatting error takes place.'''
+  def __init__(self, v):
+    Exception.__init__(self, "File could not be read.")
+
+
 
 ############################################################################
 # -------------------- Reading and writing functions --------------------- #
 ############################################################################
 
-def read(fname):
-  '''Reads in a file and returns a tuple-rific trace list'''
-  dot = fname.rfind('.')
-  if dot < 0:
-    print "No extension, assuming dcr"
-    ext = 'dcr'
+def save_wavs(fname, audiofiles):
+  audio = ''
+  for af in audiofiles:
+    audio += af[1]
+  if fname.lower().endswith('.wav'):
+    save_wav(fname, audio)
   else:
-    ext = fname[dot+1:]
+    save_wav(fname + '.wav', audio)
 
-  # TODO Implement a "raw" format.
-  if ext == 'dcr': raise 'DCR file format not implemented.'
+def save_wav(fname, audio):
+  w = wave.open(fname, 'wb')
+  w.setnchannels(1)
+  w.setframerate(1024)
+  w.setsampwidth(2)
+  for data in audio:
+    w.writeframes(data[1])
+  w.close()
 
-  f = open(fname, 'r')
-  try:
-    while True:
-      line = f.next()
-      version = '0'
-      if line.startswith(WB_REC_VERSION_PREFIX):
-        version = line[len(WB_REC_VERSION_PREFIX):].strip()
-      return _read_file(_parse_version_string(version), f)
-  except StopIteration:
-    print '''Warning: %s is empty.''' % fname
+def load_wavs(fname):
+  if fname.lower().endswith(".wav"):
+    return load_wav(fname)
+  else:
+    return load_wav(fname + '.wav')
 
-def saveDCB(fname = 'save.dcb', trace = [], positions = [], audiofiles = []):
-  '''Saves DCB-v0.1.1'''
+def load_wav(fname):
+  w = wave.open(fname, 'rb')
+  data = w.readframes(-1)
+  w.close()
+  return data
+
+def load(fname, win_sz = (640, 480)):
+  '''Reads in a file and returns a tuple-rific trace, positions, audio'''
+  if fname.lower().endswith(".dcx"):
+    return load_dcx(fname, win_sz)
+  elif fname.lower().endswith(".dct"):
+    return load_dct(fname, win_sz)
+  else:
+    return load_dcb(fname, win_sz)
+
+def save(fname, trace = [], positions = [], audiofiles = []):
+  '''Writes out a file and returns a tuple-rific trace, positions, audio'''
+  if fname.lower().endswith(".dcx"):
+    return save_dcx(fname, win_sz)
+  elif fname.lower().endswith(".dct"):
+    return save_dct(fname, win_sz)
+  else:
+    return save_dcb(fname, win_sz)
+
+def save_dcb(fname = 'save.dcb', trace = [], positions = [], audiofiles = []):
+  '''Writes DCB-v0.1.1'''
   f = open(fname, 'wb')
   f.write(DCB_MAGIC_NUMBER)
   f.write(struct.pack("<III", 0, 1, 1))  # file version
@@ -78,12 +113,13 @@ def saveDCB(fname = 'save.dcb', trace = [], positions = [], audiofiles = []):
         f.write(struct.pack("<Qff", pos[0], x, y))
       f.write(struct.pack("<I", len(audiofiles)))
       for af in audiofiles:
-        f.write(struct.pack("<QQ", af[0], len(af[1])))
-        f.write(zlib.compress(af[1], zlib.Z_BEST_COMPRESSION))
+        c_data = zlib.compress(af[1], zlib.Z_BEST_COMPRESSION)
+        f.write(struct.pack("<QQ", af[0], len(c_data)))
+        f.write(c_data)
   f.flush()
   f.close()
 
-def openDCB(fname = 'save.dcb', win_sz = (640,480)):
+def load_dcb(fname = 'save.dcb', win_sz = (640,480)):
   '''Saves DCB-v0.1.1'''
   f = open(fname, 'rb')
   if f.read(8) != DCB_MAGIC_NUMBER:
@@ -117,7 +153,7 @@ def openDCB(fname = 'save.dcb', win_sz = (640,480)):
   f.close()
   return trace, positions, audiofiles
 
-def saveDCX(fname = 'save.dcx', trace = [], positions = [], audiofiles = []):
+def save_dcx(fname = 'save.dcx', trace = [], positions = [], audiofiles = []):
   '''Saves DCX-v0.1.1
   @trace: A complex list.  See the Canvas object for details.
   @positions: A list of (t,(x,y),(w,h)) tuples
@@ -158,7 +194,7 @@ def saveDCX(fname = 'save.dcx', trace = [], positions = [], audiofiles = []):
   f.flush()
   f.close()
 
-def openDCX(fname = 'save.dcx', win_sz = (640, 480)):
+def load_dcx(fname = 'save.dcx', win_sz = (640, 480)):
   '''Reads DCX-v*.
   @win_sz: Needed to scale the (x,y) coords.'''
   # TODO unify these functions.
@@ -199,10 +235,10 @@ def openDCX(fname = 'save.dcx', win_sz = (640, 480)):
         else:
           print 'Warning: unrecognized bug version: ' + v_str
       return trace, positions, audiofiles
-  raise 'Unrecognized version: %s' % v_str
+  raise VersionError(v)
 
 
-def saveXML(fname = "save.dcx", trace = [], position = []):
+def write_dcx_0(fname = "save.dcx", trace = [], position = [], audiofiles = []):
   '''Saves DCX-v0.0.0'''
   output = open(fname, 'w')
   output.write('<?xml version="1.0" encoding="UTF-8"?>\n')
@@ -249,19 +285,22 @@ def saveXML(fname = "save.dcx", trace = [], position = []):
     output.write('    </position>\n')
   output.write('  </positions>\n')
   output.write('</document>\n')
-  output.flush() ; output.close()
+  output.flush()
+  output.close()
 
-def openXML(fname = 'strokes.dcx', window_size = (640,480)):
-  '''Loads DCX-v0.0.0 into a (trace,position) tuple.'''
+  save_wavs(fname, audiofiles)
+
+def load_dcx_O(fname = 'strokes.dcx', window_size = (640,480)):
+  '''Loads DCX-v0.0.0 into a (trace,position,audio) tuple.'''
   def get_xml_type(line, tag, typ):
     stag = '<%s type="%s">' % (tag, typ)
     etag = '</%s>' % tag
-    if not line.startswith(stag): raise 'Bad dcx: expected %s' % stag
+    if not line.startswith(stag):
+      raise 'Bad dcx: expected %s' % stag
     substr = line[len(stag):line.find(etag)]
     num = float(substr) if typ == 'float' else int(substr)
     return num
 
-  # TODO use xml.dom.minidom instead of this huge state machine.
   ifile = open(fname, 'r')
   state = 'start'
   trace = []
@@ -271,17 +310,19 @@ def openXML(fname = 'strokes.dcx', window_size = (640,480)):
     while True:
       line = ifile.next().strip()
       if state == 'start':
-        if line != '<?xml version="1.0" encoding="UTF-8"?>': raise 'Bad dcx: expected <?xml version="1.0" encoding="UTF-8"?>'
+        if line != '<?xml version="1.0" encoding="UTF-8"?>':
+          raise 'Bad dcx: expected <?xml version="1.0" encoding="UTF-8"?>'
         state = 'document'
       elif state == 'document':
         if line != '<document>':
           if line.startswith('<document'):
-            raise 'Version not supported.'
+            raise VersionError(__parse_version_string(line[:-1] + '/' + line[-1]))
           else:
             raise "Bad dcx: expected <document>"
         state = 'clears'
       elif state == 'clears':
-        if line != '<clears type="array">': raise 'Bad dcx: expected <clears type="array">'
+        if line != '<clears type="array">':
+          raise 'Bad dcx: expected <clears type="array">'
         state = 'clear'
       elif state == 'clear':
         if line.startswith('<clear type="float">'):
@@ -295,22 +336,27 @@ def openXML(fname = 'strokes.dcx', window_size = (640,480)):
         else:
           raise 'Bad dcx: expected <clear type="float"> or </clears>'
       elif state == 'slides':
-        if line != '<slides type="array">': raise 'Bad dcx: expected <slides type="array">'
+        if line != '<slides type="array">':
+          raise 'Bad dcx: expected <slides type="array">'
         state = 'slide'
       elif state == 'slide':
-        if line != '<slide>': raise 'Bad dcx: expected <slide>'
+        if line != '<slide>':
+          raise 'Bad dcx: expected <slide>'
         trace.append(clears.pop(0))
         trace.append([])
         state = 'curves'
       elif state == 'curves':
-        if line != '<curves type="array">': raise 'Bad dcx: expected <curves type="array">'
+        if line != '<curves type="array">':
+          raise 'Bad dcx: expected <curves type="array">'
         state = 'curve'
       elif state == 'curve':
-        if line != '<curve>': raise 'Bad dcx: <curve>'
+        if line != '<curve>':
+          raise 'Bad dcx: <curve>'
         trace[-1].append([])
         state = 'points'
       elif state == 'points':
-        if line != '<points type="array">': raise 'Bad dcx: expected <points type="array">'
+        if line != '<points type="array">':
+          raise 'Bad dcx: expected <points type="array">'
         state = 'point'
       elif state == 'point':
         if line == '<point>':
@@ -323,7 +369,8 @@ def openXML(fname = 'strokes.dcx', window_size = (640,480)):
             colorb = get_xml_type(ifile.next().strip(), 'colorb', 'integer') / 255.0
             thickness = get_xml_type(ifile.next().strip(), 'thickness', 'float') * (math.sqrt(window_size[0]*window_size[0]+window_size[1]*window_size[1]))/(math.sqrt(640*640+480*480))
             trace[-1][-1].append((time, (posx, posy), thickness, (colorr, colorg, colorb), window_size))
-            if ifile.next().strip() != '</point>': raise 'Bad dcx: expected </point>'
+            if ifile.next().strip() != '</point>':
+              raise 'Bad dcx: expected </point>'
           except (StopIteration, ValueError):
             raise 'Bad dcx: expected posx, posy, time, colorr, colorg, colorb, thickness, and </point>'
         elif line == '</points>':
@@ -331,7 +378,8 @@ def openXML(fname = 'strokes.dcx', window_size = (640,480)):
         else:
           raise 'Bad dcx: expected <point>...</point>'
       elif state == '/curve':
-        if line != '</curve>': raise 'Bad dcx: expected </curve>'
+        if line != '</curve>':
+          raise 'Bad dcx: expected </curve>'
         state = '/curves'
       elif state == '/curves':
         if line == '</curves>':
@@ -342,7 +390,8 @@ def openXML(fname = 'strokes.dcx', window_size = (640,480)):
         else:
           raise 'Bad dcx: expected </curves> or <curve>'
       elif state == '/slide':
-        if line != '</slide>': raise 'Bad dcx: expected </slide>'
+        if line != '</slide>':
+          raise 'Bad dcx: expected </slide>'
         state = '/slides'
       elif state == '/slides':
         if line == '<slide>':
@@ -354,7 +403,8 @@ def openXML(fname = 'strokes.dcx', window_size = (640,480)):
         else:
           raise 'Bad dcx: expected </slides> or <slide>'
       elif state == 'positions':
-        if line != '<positions type="array">': raise 'Bad dcx: expected <positions type="array">'
+        if line != '<positions type="array">':
+          raise 'Bad dcx: expected <positions type="array">'
         state = 'position'
       elif state == 'position':
         if line == '<position>':
@@ -363,7 +413,8 @@ def openXML(fname = 'strokes.dcx', window_size = (640,480)):
             posy = get_xml_type(ifile.next().strip(), 'posy', 'float') * window_size[1] / 480.0
             time = get_xml_type(ifile.next().strip(), 'time', 'float') * window_size[1] / 1000.0
             position.append((time, (posx,posy), window_size))
-            if ifile.next().strip() != '</position>': raise 'Bad dcx: expected </position>'
+            if ifile.next().strip() != '</position>':
+              raise 'Bad dcx: expected </position>'
           except (ValueError, StopIteration):
             raise 'Bad dcx: expected posx, posy, time'
         elif line == '</positions>':
@@ -371,7 +422,8 @@ def openXML(fname = 'strokes.dcx', window_size = (640,480)):
         else:
           raise 'Bad dcx: expected <position>...</position> or </positions>'
       elif state == '/document':
-        if line != '</document>': raise 'Bad dcx: expected </document>'
+        if line != '</document>':
+          raise 'Bad dcx: expected </document>'
         state = 'done'
       elif state == 'done':
         if len(line) > 0:
@@ -381,7 +433,7 @@ def openXML(fname = 'strokes.dcx', window_size = (640,480)):
   ifile.close()
   return (trace, position)
 
-def saveTXT(trace, fname = "save.dct"):
+def save_dct(fname = "save.dct", trace = [], positions = [], audiofiles = []):
   '''Saves DCT-v0.0.0'''
   output = open(fname, 'w')
   clears = []
@@ -400,6 +452,8 @@ def saveTXT(trace, fname = "save.dct"):
       output.write("\n")
   output.flush()
   output.close()
+
+  write_wavs(fname, audiofiles)
 
 
 def __parse_version_string(version):
@@ -436,22 +490,26 @@ def __parse_version_string(version):
 
   return maj, min, bug
 
-def __read_file(v, f):
+def load_dct(fname = 'save.dct', win_sz = (640, 480)):
   '''Reads the input 'f' and assumes that the file's pointer is already at one
   past the version string.  Returns a recursively-tupled representation of the
   contents of the file based on the version tuple given.'''
-  if v == (0,0,0):
-    trace = []
-    clears = []
 
-    # FSM with 5 states:
-    #   "tstamps"
-    #     Start of file.  Parses a line of floats (clear times).
-    #   "slides"
-    #     Adds a new slide with a new stroke with a single point to the state.
-    #   "slide-strokes"
-    #     Appends
-    try:
+  f = open(fname, 'r')
+
+  trace = []
+  clears = []
+
+  # FSM with 5 states:
+  #   "tstamps"
+  #     Start of file.  Parses a line of floats (clear times).
+  #   "slides"
+  #     Adds a new slide with a new stroke with a single point to the state.
+  #   "slide-strokes"
+  #     Appends
+  try:
+    v = __parse_version_string(f.next())
+    if v == (0,0,0):
       while True:  # Will be broken by StopIteration exception
         line = f.next()
         if state == 'tstamps':
@@ -483,10 +541,13 @@ def __read_file(v, f):
             stroke.append(__read_point(line))
         else:
           raise 'Non-reachable code reached!'
-    except StopIteration:
-      pass # Done reading!
-  else:
-    print "Warning: unsupported file version: %d.%d.%d" % v
+    else:
+      raise VersionError("Warning: unsupported file version: %d.%d.%d" % v)
+  except StopIteration:
+    pass # Done reading!
+
+  f.close()
+  return trace, [], []
 
 def __read_point(line):
   sp1 = line.find(' ')
@@ -498,6 +559,7 @@ def __read_point(line):
   return int(line[:sp1]), int(line[sp1+1:sp2]), float(line[sp2+1:])
 
 def __read_cts(line):
+  '''Reads the line of clear times from a DCT file.'''
   def float_or_grace(x):
     try:
       return float(x)
@@ -506,7 +568,7 @@ def __read_cts(line):
     return 0
   return map(float_or_grace, line.split(' '))
 
-def write(fname, state):
+def save_dct(fname = 'save.dct', trace = [], positions = [], audiofiles = []):
   '''Writes the contents of state to a file using the most current file
   version.'''
   output = open(fname, 'w')
