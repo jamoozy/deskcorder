@@ -55,6 +55,9 @@ class Audio:
     self.format = format
     self.out.setformat(format)
 
+  def is_recording(self):
+    return self.inp is not None
+
   def record(self, t = None):
     '''Start recording.  This will not block.  It init's the recording process.
     This Audio will continue recording until stop() gets called.'''
@@ -67,7 +70,7 @@ class Audio:
     self.inp.setrate(self.rate)
     self.inp.setperiodsize(self.period_size)
     self.inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
-    self.data.append([t, []])
+    self.data.append([t, ''])
     self.recording = True
     gobject.timeout_add(100, self.record_tick)
 
@@ -77,17 +80,17 @@ class Audio:
       # Drops 0-length data and data recorded while this is paused.
       if l > 0:
         if not self.paused:
-          self.data[-1][1].append(data)
+          self.data[-1][1] += data
       else:
         return True
     else:
-      # turn data into one large string instead of several small ones.
-      self.compress_data()
       return False
 
-  def compress_data(self):
-    if len(self.data) > 0 and len(self.data[-1][1]) > 0 and type(self.data[-1][1]) != str:
-      self.data[-1][1] = reduce(lambda a,b: a+b, self.data[-1][1])
+#  def compress_data(self):
+#    '''Turns all list-type data into str-type.'''
+#    for i in range(len(self.data)):
+#      if type(self.data[i][1]) == list:
+#        self.data[-1][1] = reduce(lambda a,b: a+b, self.data[-1][1])
 
   def play(self):
     if len(self.data) == 0 or len(self.data[0][1]) == 0:
@@ -105,6 +108,7 @@ class Audio:
     '''ttpt == "time to play to" so that things will only play when they
     should.'''
     if self.is_playing():
+#      self.compress_data()
       if self.paused: return True
       # This has the effect of a do-while loop that loops until no more data
       # can be written to the speakers.
@@ -169,7 +173,6 @@ class Audio:
     w.setsampwidth(2)
     for data in self.data:
       w.writeframes(data[1])
-      print "%d of audio data saved" % len(self.data[1]) ; sys.stdout.flush()
     w.close()
 
   def open(self, fname = "strokes.wav"):

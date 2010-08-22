@@ -67,7 +67,7 @@ def load_wav(fname):
   w.close()
   return data
 
-def load(fname, win_sz = (640, 480)):
+def load(fname, win_sz = (1,1)):
   '''Reads in a file and returns a tuple-rific trace, positions, audio'''
   if fname.lower().endswith(".dcx"):
     return load_dcx(fname, win_sz)
@@ -79,11 +79,11 @@ def load(fname, win_sz = (640, 480)):
 def save(fname, trace = [], positions = [], audiofiles = []):
   '''Writes out a file and returns a tuple-rific trace, positions, audio'''
   if fname.lower().endswith(".dcx"):
-    return save_dcx(fname, win_sz)
+    return save_dcx(fname, trace, positions, audiofiles)
   elif fname.lower().endswith(".dct"):
-    return save_dct(fname, win_sz)
+    return save_dct(fname, trace, positions, audiofiles)
   else:
-    return save_dcb(fname, win_sz)
+    return save_dcb(fname, trace, positions, audiofiles)
 
 def save_dcb(fname = 'save.dcb', trace = [], positions = [], audiofiles = []):
   '''Writes DCB-v0.1.1'''
@@ -93,34 +93,38 @@ def save_dcb(fname = 'save.dcb', trace = [], positions = [], audiofiles = []):
   f.write(struct.pack("<I", len(trace) / 2))
   for slide in trace:
     if type(slide) == float:
-      f.write(struct.pack("<Q", int(slide * 1000)))
+      f.write(struct.pack("<Q", int(slide * 1000)))  # Slide tstamp in ms
     else:
-      f.write(struct.pack("<I", len(slide)))
+      f.write(struct.pack("<I", len(slide))) # number of strokes in slide
       for stroke in slide:
-        f.write(struct.pack("<I", len(stroke)))
+        f.write(struct.pack("<I", len(stroke))) # number of points in stroke
         if len(stroke) > 0:
+          # Stroke color
           f.write(struct.pack("<fff", stroke[0][3][0], stroke[0][3][1], stroke[0][3][2]))
           for point in stroke:
             x = point[1][0] / float(point[4][0])
             y = point[1][1] / float(point[4][1])
             thickness = point[2] / (math.sqrt(point[4][0] * point[4][0] +
                                               point[4][1] * point[4][1]))
+            # point tstamp (ms), x, y, and "thickness"
             f.write(struct.pack("<Qfff", point[0] * 1000, x, y, thickness))
-      f.write(struct.pack("<I", len(positions)))
+      f.write(struct.pack("<I", len(positions)))  # number of positions
       for pos in positions:
         x = pos[1][0] / float(pos[2][0])
         y = pos[1][1] / float(pos[2][1])
-        f.write(struct.pack("<Qff", pos[0], x, y))
-      f.write(struct.pack("<I", len(audiofiles)))
+        # point tstamp (ms), x, y
+        f.write(struct.pack("<Qff", pos[0] * 1000, x, y))
+      f.write(struct.pack("<I", len(audiofiles))) # number of audio files
       for af in audiofiles:
         c_data = zlib.compress(af[1], zlib.Z_BEST_COMPRESSION)
-        f.write(struct.pack("<QQ", af[0], len(c_data)))
-        f.write(c_data)
+        # tstamp (ms), bytes of data in audio file
+        f.write(struct.pack("<QQ", af[0] * 1000, len(c_data)))
+        f.write(c_data) # (compressed) audio data
   f.flush()
   f.close()
 
-def load_dcb(fname = 'save.dcb', win_sz = (640,480)):
-  '''Saves DCB-v0.1.1'''
+def load_dcb(fname = 'save.dcb', win_sz = (1,1)):
+  '''Loads DCB-v0.1.1'''
   f = open(fname, 'rb')
   if f.read(8) != DCB_MAGIC_NUMBER:
     raise AttributeError("Magic number does not match.")
@@ -131,25 +135,33 @@ def load_dcb(fname = 'save.dcb', win_sz = (640,480)):
       trace = []
       positions = []
       audiofiles = []
-      num_slides = struct.unpack("<I", f.read(4))[0]
+      num_slides = struct.unpack("<I", f.read(4))[0]  # number of slides
       for slide_i in range(num_slides):
+        # tstamp of "clear" (ms), number of strokes in first slide
         t, num_strokes = struct.unpack("<QI", f.read(8 + 4))
         trace.append(t / 1000.0)
         trace.append([])
         for stroke_i in range(num_strokes):
           trace[-1].append([])
+          # number of points in this stroke, color (r,g,b)
           num_points, r, g, b = struct.unpack("<Ifff", f.read(4 * 4))
           for point_i in range(num_points):
+            # timestamp (ms), x, y, "thickness"
             ts, x, y, th = struct.unpack("<Qfff", f.read(8 + 4 * 3))
             trace[-1][-1].append((ts / 1000.0, (x * win_sz[0], y * win_sz[1]), th * math.sqrt(win_sz[0] * win_sz[0] + win_sz[1] * win_sz[1]), (r,g,b), win_sz))
+      # number of points
       num_positions = struct.unpack("<I", f.read(4))[0]
       for pos_i in range(num_positions):
+        # tstamp (ms), x, y
         t, x, y = struct.unpack("<Qff", f.read(8 + 4 + 4))
-        positions.append((t, (x * win_sz[0], y * win_sz[1]), win_sz))
+        positions.append((t / 1000, (x * win_sz[0], y * win_sz[1]), win_sz))
+      # number of audio files
       num_afs = struct.unpack("<I", f.read(4))[0]
       for af_i in range(num_afs):
+        # tstamp (ms), bytes of (compressed) audio data
         t, sz = struct.unpack("<QQ", f.read(8 + 8))
-        audiofiles.append([t, zlib.decompress(f.read(sz))])
+        # data
+        audiofiles.append([t / 1000, zlib.decompress(f.read(sz))])
   f.close()
   return trace, positions, audiofiles
 
@@ -194,7 +206,7 @@ def save_dcx(fname = 'save.dcx', trace = [], positions = [], audiofiles = []):
   f.flush()
   f.close()
 
-def load_dcx(fname = 'save.dcx', win_sz = (640, 480)):
+def load_dcx(fname = 'save.dcx', win_sz = (1,1)):
   '''Reads DCX-v*.
   @win_sz: Needed to scale the (x,y) coords.'''
   # TODO unify these functions.
@@ -205,7 +217,7 @@ def load_dcx(fname = 'save.dcx', win_sz = (640, 480)):
   if v[0] == 0:
     if v[0] == 0:
       if v[1] == 0:
-        trace, positions = openXML(fname, win_sz)
+        trace, positions = load_dcx_0(fname, win_sz)
         return (trace, positions, [])
     if v[1] == 1:
       trace = []
@@ -238,7 +250,7 @@ def load_dcx(fname = 'save.dcx', win_sz = (640, 480)):
   raise VersionError(v)
 
 
-def write_dcx_0(fname = "save.dcx", trace = [], position = [], audiofiles = []):
+def save_dcx_0(fname = "save.dcx", trace = [], position = [], audiofiles = []):
   '''Saves DCX-v0.0.0'''
   output = open(fname, 'w')
   output.write('<?xml version="1.0" encoding="UTF-8"?>\n')
@@ -290,7 +302,7 @@ def write_dcx_0(fname = "save.dcx", trace = [], position = [], audiofiles = []):
 
   save_wavs(fname, audiofiles)
 
-def load_dcx_O(fname = 'strokes.dcx', window_size = (640,480)):
+def load_dcx_0(fname = 'strokes.dcx', window_size = (640,480)):
   '''Loads DCX-v0.0.0 into a (trace,position,audio) tuple.'''
   def get_xml_type(line, tag, typ):
     stag = '<%s type="%s">' % (tag, typ)
@@ -490,7 +502,7 @@ def __parse_version_string(version):
 
   return maj, min, bug
 
-def load_dct(fname = 'save.dct', win_sz = (640, 480)):
+def load_dct(fname = 'save.dct', win_sz = (1,1)):
   '''Reads the input 'f' and assumes that the file's pointer is already at one
   past the version string.  Returns a recursively-tupled representation of the
   contents of the file based on the version tuple given.'''
