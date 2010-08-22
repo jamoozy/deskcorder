@@ -1,0 +1,36 @@
+\documentclass{article}
+
+  
+
+\newcommand{\functiondefinition}[3]{Function:#1
+
+Arguments:#2
+
+Description: #3}
+\begin{document}
+
+\section{``{\tt Audio}'' class requirements}
+
+Every class named Audio must have the following functions:
+
+\functiondefinition{\_\_init\_\_}{}{Initialization that requires no arguments}
+\functiondefinition{reset}{}{Function to set the state of the Audio object back to ``pristine".}
+\functiondefinition{load\_data}{data:Raw sound data to load., format:The format of the sound data.}{A function to load raw sound data into an internal buffer, of some sort, for later playback}
+\functiondefinition{record}{t:Time to start recording.}{}
+\functiondefinition{is\_recording}{}{}
+\functiondefinition{play}{}{Plays all sound data until stop() is called.  May block.}
+\functiondefinition{play\_init}{}{Initializes playback of data.  Does not actually start playing back.  Use this before repeated calls to play\_tick()}
+\functiondefinition{play\_tick}{ttpt:Time to play to.}{}
+\functiondefinition{is\_playing}{}{}
+\functiondefinition{get\_s\_played}{}{Gets the number of seconds played in the currently-playing sound.}
+\functiondefinition{get\_time\_of\_first\_event}{}{Gets the time the first audio file starts.}
+\functiondefinition{get\_current\_audio\_start\_time}{Gets the time the current audio file starts.}
+\functiondefinition{pause}{}{Pauses playback/recording.}
+\functiondefinition{unpause}{}{Unpauses playback/recording.}
+\functiondefinition{stop}{}{Stops playback/recording.}
+
+\section{``{\tt GUI} class requirements}
+
+\section{``{\tt Canvas} class requirements}
+
+\end{document}
