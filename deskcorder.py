@@ -501,39 +501,66 @@ class Deskcorder:
 # -------------------------- Testing/Running ------------------------------- #
 ##############################################################################
 
-if __name__ == '__main__':
-  try: # to import a GUI module
-    from qtgui import Canvas, GUI
-    has_gui = True
-  except ImportError:
-    try:
-      from gtkgui import Canvas, GUI
-      has_gui = True
-    except ImportError:
-      from dummy import Canvas, GUI
-      has_gui = False
-
-  try: # to import an audio module
-    from qtaudio import Audio
-    audio = True
-  except ImportError:
-    try:
-      from alsa import Audio
-      audio = True
-    except ImportError:
-      from dummy import Audio
-      audio = False
-
-  fname = None
-  if len(sys.argv) > 1:
-    if sys.argv[1] == '-h' or sys.argv[1] == '--help':
+def parse_args(args):
+  fname, audio, video = None, None, None
+  for arg in args:
+    if arg == '-h' or arg == '--help':
       print 'Usage %s [-A|--no-audio]'
-    elif sys.argv[1] == '-G' or sys.argv[1] == '--no-gui':
+    elif arg == '-G' or arg == '--no-gui':
       has_gui = False
-    elif sys.argv[1] == '-A' or sys.argv[1] == '--no-audio':
-      audio = False
-    elif sys.argv[1].startswith('--open='):
-      fname = sys.argv[1][7:]
+    elif arg == '-A' or arg == '--no-audio':
+      audio = 'dummy'
+    elif arg.startswith('--open='):
+      fname = arg[7:]
+    elif arg.startswith('--use-gui='):
+      video = arg[10:]
+    elif arg.startswith('--use-audio='):
+      audio = arg[12:]
+      pass
     else:
       print 'Unrecognized command: "%s"' % sys.argv[1]
+  return fname, audio, video
+
+if __name__ == '__main__':
+  VALID_V_MODULES = ['qtgui', 'gtkgui']
+  VALID_A_MODULES = ['qtaudio', 'alsa']
+
+  fname, audio, video = parse_args(sys.argv[1:])
+
+  if audio is not None:
+    try:
+      Audio = __import__(audio).Audio
+    except ImportError:
+      audio = None
+
+  if audio is None:
+    for a in VALID_A_MODULES:
+      try:
+        Audio = __import__(a).Audio
+        audio = a
+        break
+      except ImportError:
+        pass
+    if a is None:
+      from dummy import Audio
+
+  if video is not None:
+    try:
+      Canvas = __import__(video).Canvas
+      GUI = __import__(video).GUI
+    except ImportError:
+      video = None
+
+  if video is None:
+    for v in VALID_V_MODULES:
+      try:
+        Canvas = __import__(v).Canvas
+        GUI = __import__(v).GUI
+        video = v
+        break
+      except ImportError:
+        pass
+    if video is None:
+      from dummy import GUI, Canvas
+
   Deskcorder("layout.glade").run(fname)
