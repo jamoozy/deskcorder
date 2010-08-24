@@ -1,3 +1,4 @@
+import sys
 import math
 import base64
 import xml.dom.minidom
@@ -5,11 +6,13 @@ import struct  # for binary conversions
 import zlib    # to compress audio data
 import wave
 
+import deskcorder as dc
+
 # Should appear on first line, to denote which version was used.
-WB_REC_VERSION_PREFIX = 'WB v'
+DC_REC_VERSION_PREFIX = 'WB v'
 
 # Current default version.
-WB_REC_VERSION = '0.0.0'
+DC_REC_VERSION = (0,1,2)
 
 # Currently-supported formats.
 FORMATS = {'dcx': "Whiteboard XML file",
@@ -76,99 +79,151 @@ def load(fname, win_sz = (1,1)):
   else:
     return load_dcb(fname, win_sz)
 
-def save(fname, trace = [], positions = [], audiofiles = []):
+def save(fname, trace = None, audiofiles = [], req_v = DC_REC_VERSION):
   '''Writes out a file and returns a tuple-rific trace, positions, audio'''
+  if trace is None: return
   if fname.lower().endswith(".dcx"):
-    return save_dcx(fname, trace, positions, audiofiles)
+    return save_dcx(fname, trace, audiofiles, req_v)
   elif fname.lower().endswith(".dct"):
-    return save_dct(fname, trace, positions, audiofiles)
+    return save_dct(fname, trace, audiofiles, req_v)
   else:
-    return save_dcb(fname, trace, positions, audiofiles)
+    return save_dcb(fname, trace, audiofiles, req_v)
 
-def save_dcb(fname = 'save.dcb', trace = [], positions = [], audiofiles = []):
+def save_dcb(fname = 'save.dcb', trace = None, audiofiles = [], req_v = DC_REC_VERSION):
   '''Writes DCB-v0.1.1'''
+  if trace is None: return
   f = open(fname, 'wb')
+  f_log = open(fname + ".save_log", 'w')
   f.write(DCB_MAGIC_NUMBER)
   f.write(struct.pack("<III", 0, 1, 1))  # file version
-  f.write(struct.pack("<I", len(trace) / 2))
-  for slide in trace:
-    if type(slide) == float:
-      f.write(struct.pack("<Q", int(slide * 1000)))  # Slide tstamp in ms
-    else:
-      f.write(struct.pack("<I", len(slide))) # number of strokes in slide
-      for stroke in slide:
-        f.write(struct.pack("<I", len(stroke))) # number of points in stroke
-        if len(stroke) > 0:
-          # Stroke color
-          f.write(struct.pack("<fff", stroke[0][3][0], stroke[0][3][1], stroke[0][3][2]))
-          for point in stroke:
-            x = point[1][0] / float(point[4][0])
-            y = point[1][1] / float(point[4][1])
-            thickness = point[2] / (math.sqrt(point[4][0] * point[4][0] +
-                                              point[4][1] * point[4][1]))
-            # point tstamp (ms), x, y, and "thickness"
-            f.write(struct.pack("<Qfff", point[0] * 1000, x, y, thickness))
-      f.write(struct.pack("<I", len(positions)))  # number of positions
-      for pos in positions:
-        x = pos[1][0] / float(pos[2][0])
-        y = pos[1][1] / float(pos[2][1])
-        # point tstamp (ms), x, y
-        f.write(struct.pack("<Qff", pos[0] * 1000, x, y))
-      f.write(struct.pack("<I", len(audiofiles))) # number of audio files
-      for af in audiofiles:
-        c_data = zlib.compress(af[1], zlib.Z_BEST_COMPRESSION)
-        # tstamp (ms), bytes of data in audio file
-        f.write(struct.pack("<QQ", af[0] * 1000, len(c_data)))
-        f.write(c_data) # (compressed) audio data
+  f.write(struct.pack("<I", len(trace)))
+  f_log.write('File will have %d slides\n' % (len(trace) / 2))
+  for slide in trace.slides:
+    f.write(struct.pack("<QI", int(slide.t * 1000), len(slide))) # tstamp & number of strokes
+    f_log.write('  slide: %d strokes at %.0fms' % (len(slide), slide.t))
+    f_log.flush()
+    for stroke in slide.strokes:
+      f.write(struct.pack("<I", len(stroke))) # number of points in stroke
+      f_log.write('  stroke has %d points\n' % len(stroke))
+      f_log.flush()
+      if len(stroke) > 0:
+        # Stroke color
+        f.write(struct.pack("<fff", stroke.color[0], stroke.color[1], stroke.color[2]))
+        f_log.write('  stroke color: (%.3f,%.3f,%.3f)\n' % stroke.color)
+        f_log.flush()
+        for point in stroke.points:
+          if req_v[2] == 1:
+            thickness = point.p / math.sqrt(2)
+          elif req_v[2] == 2:
+            thickness = point.p
+          else:
+            raise VersionError(req_v)
+          f.write(struct.pack("<Qfff", point.t * 1000, point.x(), point.y(), thickness))
+          f_log.write('    point (%.3f,%.3f) @ %.1f with %.2f%%\n' % (point.x(), point.y(), point.t, thickness * 100))
+          f_log.flush()
+
+  f.write(struct.pack("<I", len(trace.moves)))  # number of moves sans mouse click
+  f_log.write('%d positions\n' % len(trace.moves))
+  f_log.flush()
+  for m in trace.moves:
+    # point tstamp (ms), x, y
+    f.write(struct.pack("<Qff", m.t * 1000, m.x(), m.y()))
+    f_log.write('  pos: (%.3f,%.3f) @ %fms\n' % (m.x(), m.y(), m.t))
+    f_log.flush()
+  f.write(struct.pack("<I", len(audiofiles))) # number of audio files
+  for af in audiofiles:
+    c_data = zlib.compress(af[1], zlib.Z_BEST_COMPRESSION)
+    # tstamp (ms), bytes of data in audio file
+    f.write(struct.pack("<QQ", af[0] * 1000, len(c_data)))
+    f_log.write('  audio @ %.2fs with %d bytes\n' % (af[0], len(c_data)))
+    f_log.flush()
+    f.write(c_data) # (compressed) audio data
   f.flush()
   f.close()
+
+def bin_read(f, fmt):
+  '''Reads file f using struct to get datatypes shown in fmt.'''
+  return struct.unpack(fmt, f.read(struct.calcsize(fmt)))
 
 def load_dcb(fname = 'save.dcb', win_sz = (1,1)):
   '''Loads DCB-v0.1.1'''
   f = open(fname, 'rb')
+  f_log = open(fname + '.load_log', 'w')
   if f.read(8) != DCB_MAGIC_NUMBER:
     raise AttributeError("Magic number does not match.")
+  f_log.write('Magic number!\n')
 
-  v = struct.unpack("<III", f.read(4 + 4 + 4))  # file version
+  v = bin_read(f, "<III")  # file version
+  f_log.write('version %d.%d.%d\n' % v)
   if v[0] == 0:
     if v[1] == 1:
-      trace = []
-      positions = []
+      trace = dc.Trace()
       audiofiles = []
-      num_slides = struct.unpack("<I", f.read(4))[0]  # number of slides
-      for slide_i in range(num_slides):
+      f_log.write("We're at f.tell():%d\n" % f.tell())
+      num_slides = bin_read(f, "<I")[0]  # number of slides
+      f_log.write('%d slides\n' % num_slides)
+      f_log.flush()
+      for slide_i in xrange(num_slides):
         # tstamp of "clear" (ms), number of strokes in first slide
-        t, num_strokes = struct.unpack("<QI", f.read(8 + 4))
-        trace.append(t / 1000.0)
-        trace.append([])
-        for stroke_i in range(num_strokes):
-          trace[-1].append([])
+        f_log.write("  We're at f.tell():%d\n" % f.tell())
+        t, num_strokes = bin_read(f, "<QI")
+        f_log.write('  slide %d: %d strokes at %.1fs\n' % (slide_i, num_strokes, t / 1000.))
+        f_log.flush()
+        trace.append(t / 1000.)
+        for stroke_i in xrange(num_strokes):
           # number of points in this stroke, color (r,g,b)
-          num_points, r, g, b = struct.unpack("<Ifff", f.read(4 * 4))
-          for point_i in range(num_points):
-            # timestamp (ms), x, y, "thickness"
-            ts, x, y, th = struct.unpack("<Qfff", f.read(8 + 4 * 3))
-            trace[-1][-1].append((ts / 1000.0, (x * win_sz[0], y * win_sz[1]), th * math.sqrt(win_sz[0] * win_sz[0] + win_sz[1] * win_sz[1]), (r,g,b), win_sz))
+          f_log.write("    We're at f.tell():%d\n" % f.tell())
+          num_points = bin_read(f, "<I")[0]
+          if num_points > 0:
+            color = bin_read(f, "<fff")
+            f_log.write('    stroke %d: %d points with (%.1f,%.1f,%.1f)\n' % ((stroke_i, num_points) + color))
+            f_log.flush()
+            trace.last().append(color)
+            for point_i in xrange(num_points):
+              # timestamp (ms), x, y, "thickness"
+              ts, x, y, th = bin_read(f, "<Qfff")
+              f_log.write('      point %d: (%.3f,%.3f) @ %.1fs with %.1f%%\n' % (point_i, x, y, ts / 1000., th * 100))
+              f_log.flush()
+              if v[2] == 1:
+                trace[-1][-1].append((x, y), ts / 1000.0, th)
+              elif v[2] == 2:
+                trace[-1][-1].append((x, y), ts / 1000.0, th * math.sqrt(2))
+          else:
+            f_log.write('    Empty stroke!\n')
+
       # number of points
-      num_positions = struct.unpack("<I", f.read(4))[0]
-      for pos_i in range(num_positions):
+      f_log.write("We're at f.tell():%d\n" % f.tell())
+      num_moves = bin_read(f, "<I")[0]
+      f_log.write('%d positions\n' % num_moves)
+      f_log.flush()
+      for pos_i in xrange(num_moves):
         # tstamp (ms), x, y
-        t, x, y = struct.unpack("<Qff", f.read(8 + 4 + 4))
-        positions.append((t / 1000, (x * win_sz[0], y * win_sz[1]), win_sz))
+        f_log.write(  "We're at f.tell():%d\n" % f.tell())
+        t, x, y = bin_read(f, "<Qff")
+        f_log.write('  pos %d: (%.3f,%.3f) @ %.1fs\n' % (pos_i, x, y, t / 1000.))
+        f_log.flush()
+        trace.add_move((x, y), t / 1000.)
+
       # number of audio files
-      num_afs = struct.unpack("<I", f.read(4))[0]
-      for af_i in range(num_afs):
+      f_log.write("We're at f.tell():%d\n" % f.tell())
+      num_afs = bin_read(f, "<I")[0]
+      f_log.write('%d audio files\n' % num_afs)
+      f_log.flush()
+      for af_i in xrange(num_afs):
         # tstamp (ms), bytes of (compressed) audio data
-        t, sz = struct.unpack("<QQ", f.read(8 + 8))
+        f_log.write(  "We're at f.tell():%d\n" % f.tell())
+        t, sz = bin_read(f, "<QQ")
+        f_log.write('  Audio %d: %d bytes at %.1fs\n' % (af_i, sz, t / 1000.))
+        f_log.flush()
         # data
         audiofiles.append([t / 1000, zlib.decompress(f.read(sz))])
   f.close()
-  return trace, positions, audiofiles
+  f_log.close()
+  return trace, audiofiles
 
-def save_dcx(fname = 'save.dcx', trace = [], positions = [], audiofiles = []):
+def save_dcx(fname = 'save.dcx', trace = [], audiofiles = [], req_v = DC_REC_VERSION):
   '''Saves DCX-v0.1.1
   @trace: A complex list.  See the Canvas object for details.
-  @positions: A list of (t,(x,y),(w,h)) tuples
   @audiofiles: A list of (t,data) tuples'''
   f = open(fname, 'w')
   f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
@@ -445,7 +500,7 @@ def load_dcx_0(fname = 'strokes.dcx', window_size = (640,480)):
   ifile.close()
   return (trace, position)
 
-def save_dct(fname = "save.dct", trace = [], positions = [], audiofiles = []):
+def save_dct(fname = "save.dct", trace = [], positions = [], audiofiles = [], req_v = DC_REC_VERSION):
   '''Saves DCT-v0.0.0'''
   output = open(fname, 'w')
   clears = []
@@ -609,3 +664,50 @@ def save_dct(fname = 'save.dct', trace = [], positions = [], audiofiles = []):
     output.write("\n")
   output.flush()
   output.close()
+
+
+if __name__ == '__main__':
+  t = [1000.0,
+        [
+          [(1000.1, (.0, .0), 1., (.0,.0,.0), (1,1)),
+           (1000.2, (.2, .2), 1., (.0,.0,.0), (1,1)),
+           (1000.3, (.4, .4), 1., (.0,.0,.0), (1,1))],
+          [(1000.4, (.6, .6), 1., (.0,.0,.0), (1,1)),
+           (1000.5, (.8, .8), 1., (.0,.0,.0), (1,1)),
+           (1000.6, (1., 1.), 1., (.0,.0,.0), (1,1))]
+        ],
+       1005.0,
+        [
+          [(1005.1, (1., .0), 1., (.0,.0,.0), (1,1)),
+           (1005.2, (.8, .2), 1., (.0,.0,.0), (1,1)),
+           (1005.3, (.6, .4), 1., (.0,.0,.0), (1,1))],
+          [(1005.4, (.4, .6), 1., (.0,.0,.0), (1,1)),
+           (1005.5, (.2, .8), 1., (.0,.0,.0), (1,1)),
+           (1005.6, (.0, 1.), 1., (.0,.0,.0), (1,1))]
+        ]
+      ]
+  p = [(1003.1, (.1, 1.), (1,1)),
+       (1003.2, (.1, .8), (1,1)),
+       (1003.3, (.1, .6), (1,1)),
+       (1003.3, (.1, .4), (1,1)),
+       (1003.3, (.1, .2), (1,1)),
+       (1003.4, (.1, .0), (1,1))]
+  a = []
+  trace = dc.Trace()
+  trace.load_trace_data(t)
+  trace.load_position_data(p)
+
+  save('test.dcb', trace, a)
+  tb,ab = load('test.dcb')
+
+  if t != tb.make_trace_data() or p != tb.make_position_data() or a != ab:
+    print "Binary errors detected."
+    f = open('test_errors.log', 'w')
+    f.write("wrote: " + str(t) + "\n")
+    f.write("  got: " + str(tb.make_trace_data()) + "\n")
+    f.write("wrote: " + str(p) + "\n")
+    f.write("  got: " + str(tb.make_position_data()) + "\n")
+    f.write("wrote: " + str(a) + "\n")
+    f.write("  got: " + str(ab) + "\n")
+    f.flush()
+    f.close()

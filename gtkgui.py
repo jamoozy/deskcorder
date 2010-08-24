@@ -258,7 +258,6 @@ class GUI:
     self.glade_tree.get_widget("white").connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(1.0, 1.0, 1.0))
 
-    # other soup
     self.root.connect("delete-event", lambda x,y: gtk.main_quit())
 
     self.glade_tree.get_widget("edit/add").connect("activate",
@@ -275,15 +274,17 @@ class GUI:
         lambda x: self.save())
     self.glade_tree.get_widget("file/save-as").connect("activate",
         lambda x: self.save_as())
-    self.glade_tree.get_widget("file/quit").connect("activate",
-        lambda x: gtk.main_quit())
-    self.glade_tree.get_widget("quit").connect("clicked",
-        lambda x: gtk.main_quit())
+    self.glade_tree.get_widget("file/quit").connect("activate", self.quit)
+    self.glade_tree.get_widget("quit").connect("clicked", self.quit)
 
     self.save_fun = None
     self.open_fun = None
 
     self.canvas.set_extension_events(gtk.gdk.EXTENSION_EVENTS_ALL)
+
+  def quit(self, event):
+    if not self.canvas.dirty or self.dirty_ok():
+      gtk.main_quit()
 
 
   # -------- Load/Save dialogues.
@@ -330,8 +331,8 @@ class GUI:
   # -------- Callbacks ---------------------
 
   def connect_new(self, fun):
-    self.glade_tree.get_widget("file/new").connect("activate", lambda x: fun)
-    self.glade_tree.get_widget("new").connect("clicked", lambda x: fun)
+    self.glade_tree.get_widget("file/new").connect("activate", lambda x: fun())
+    self.glade_tree.get_widget("new").connect("clicked", lambda x: fun())
 
   def connect_record(self, fun):
     self.record_button.connect("toggled", lambda x: fun(x.get_active()))
