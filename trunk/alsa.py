@@ -39,6 +39,25 @@ class Audio:
     self.out.setperiodsize(self.period_size)
     self.out.setformat(self.format)
 
+  def make_data(self):
+    data = []
+    for d in self.data:
+      data.append([d[0], ''])
+      for p in d[1]:
+        data[-1][1] += p
+    return data
+
+  def load_data(self, data):
+    self.data = []
+    for d in data:
+      self.data.append([d[0], []])
+      i1 = 0
+      i2 = self.period_size
+      while i1 < len(d[1]):
+        self.data[-1][1].append(d[1][i1:i2])
+        i1 = i2
+        i2 += self.period_size
+
   def print_info(self):
     print 'Card name: %s' % a.inp.cardname()
     print ' PCM mode: %d' % a.inp.pcmmode()
@@ -49,11 +68,6 @@ class Audio:
     self.play_start = None
     self.recording = False
     self.paused = False
-
-  def load_data(self, data, format):
-    self.data = data
-    self.format = format
-    self.out.setformat(format)
 
   def is_recording(self):
     return self.inp is not None
@@ -70,7 +84,7 @@ class Audio:
     self.inp.setrate(self.rate)
     self.inp.setperiodsize(self.period_size)
     self.inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
-    self.data.append([t, ''])
+    self.data.append([t, []])
     self.recording = True
     gobject.timeout_add(100, self.record_tick)
 
@@ -80,17 +94,21 @@ class Audio:
       # Drops 0-length data and data recorded while this is paused.
       if l > 0:
         if not self.paused:
-          self.data[-1][1] += data
+          self.data[-1][1].append(data)
       else:
         return True
     else:
       return False
 
-#  def compress_data(self):
-#    '''Turns all list-type data into str-type.'''
-#    for i in range(len(self.data)):
-#      if type(self.data[i][1]) == list:
-#        self.data[-1][1] = reduce(lambda a,b: a+b, self.data[-1][1])
+  def compress_data(self):
+    '''Turns all list-type data into str-type.'''
+    for i in xrange(len(self.data)):
+      if type(self.data[i][1]) == list:
+        for j in xrange(len(self.data[i][1]) - 1):
+          k = j + 1
+          while len(self.data[i][1][j]) < self.period_size:
+            sz = self.period_size - len(self.data[i][1][j])
+            self.data[i][1][j] += self.data[i][1][k][:sz]
 
   def play(self):
     if len(self.data) == 0 or len(self.data[0][1]) == 0:
@@ -99,34 +117,28 @@ class Audio:
     gobject.timeout_add(100, self.play_tick)
 
   def play_init(self):
+    self.compress_data()
     self.play_start = time.time()
-    self.play_iter1 = 0
-    self.play_iter2 = self.period_size
     self.data_iter = 0
+    self.per_iter = 0
 
   def play_tick(self, ttpt = None):
     '''ttpt == "time to play to" so that things will only play when they
     should.'''
     if self.is_playing():
-#      self.compress_data()
       if self.paused: return True
       # This has the effect of a do-while loop that loops until no more data
       # can be written to the speakers.
       while ttpt is None or ttpt >= self.data[self.data_iter][0]:
-        data = self.data[self.data_iter][1][self.play_iter1:self.play_iter2]
-        dt = time.time() - self.data[self.data_iter][0]
+        data = self.data[self.data_iter][1][self.per_iter]
         if self.out.write(data) != 0:
-          self.play_iter1 = self.play_iter2
-          self.play_iter2 += self.period_size
-          if self.play_iter1 >= len(self.data[self.data_iter][1]):
-            self.play_iter1 = 0
-            self.play_iter2 = self.period_size
+          self.per_iter += 1
+          if self.per_iter >= len(self.data[self.data_iter][1]):
+            self.per_iter = 0
             self.data_iter += 1
             if self.data_iter >= len(self.data):
               self.stop()
               return False
-          elif self.play_iter2 > len(self.data[self.data_iter][1]):
-            self.play_iter2 = len(self.data[self.data_iter][1])
         else:
           return self.is_playing()
       return self.is_playing()
@@ -138,8 +150,8 @@ class Audio:
 
   def get_s_played(self):
     '''Computes and returns number of seconds played in this recording.'''
-    if self.is_playing() and len(self.data) > 0 and self.play_iter1 < len(self.data[self.data_iter][1]):
-      return self.play_iter1 / float(self.bytes_per_second)
+    if self.is_playing() and len(self.data) > 0 and self.per_iter != 0:
+      return self.period_size * self.per_iter / float(self.bytes_per_second)
     else:
       return -1
 

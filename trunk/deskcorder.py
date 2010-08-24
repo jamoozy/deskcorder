@@ -14,6 +14,8 @@ import recorder
 ############################################################################
 
 class Trace(object):
+  '''A state object.  This object is the representation of the trace (get the
+  name now???) of the pen through the run of a program.'''
   def __init__(self, t = None):
     '''Initialize a blank state object.  If you have internal data (formerly
     known as a "trace"), then you can just pass that here.'''
@@ -21,6 +23,7 @@ class Trace(object):
     self.moves = []  # like strokes, except the pen is up
 
   def load_trace_data(self, data):
+    '''Load from the old, tuple-ized format.'''
     self.slides = []
     for s in data:
       if type(s) == float:
@@ -31,12 +34,14 @@ class Trace(object):
         raise RuntimeError('Unrecognized type')
 
   def load_position_data(self, data):
+    '''Load the position information from the old tuple-ized format.'''
     self.moves = [Point.from_position_data(p) for p in data]
 
   def make_trace_data(self):
+    '''Converts this data into the old tuple-rific format.'''
     data = []
     for s in self.slides:
-      data = data + s.make_trace_data()
+      data += s.make_trace_data()
     return data
 
   def make_position_data(self):
@@ -50,6 +55,9 @@ class Trace(object):
 
   def __len__(self):
     return len(self.slides)
+
+  def first(self):
+    return self.slides[0] if len(self.slides) else []
 
   def last(self):
     '''Returns [] (not None) if empty so len() works.'''
@@ -109,6 +117,9 @@ class Slide(object):
   def __len__(self):
     return len(self.strokes)
 
+  def first(self):
+    return self.strokes[0] if len(self.strokes) > 0 else []
+
   def last(self):
     '''Returns [] (not None) if empty so len() works.'''
     return self.strokes[-1] if len(self.strokes) > 0 else []
@@ -121,7 +132,7 @@ class Slide(object):
     elif g is not None and b is not None:
       self.strokes.append(Stroke((r,g,b)))
     else:
-      raise RuntimeError('Expected Stroke, not %s' % type(s))
+      raise RuntimeError('Expected Stroke, not %s' % str(type(r)))
 
 
 class Stroke(object):
@@ -145,6 +156,9 @@ class Stroke(object):
 
   def __len__(self):
     return len(self.points)
+
+  def first(self):
+    return self.points[0] if len(self.points) > 0 else []
 
   def last(self):
     '''Returns [] (not None) if empty so len() works.'''
@@ -187,6 +201,12 @@ class Point(object):
   def __str__(self):
     return 'Point: (%f,%f) @ %f with %f%%' % (self.pos + (self.t, self.p * 100))
 
+  def x(self):
+    return self.pos[0]
+
+  def y(self):
+    return self.pos[1]
+
 
 
 ############################################################################
@@ -201,34 +221,30 @@ class Deskcorder:
     self.break_times = []
     self.last_pause = None
 
-    self.gui_enabled = gui_enabled
-    if gui_enabled:
-      self.gui = GUI(layout)
-      self.gui.connect_new(self.reset)
-      self.gui.connect_play(self.play)
-      self.gui.connect_pause(self.pause)
-      self.gui.connect_stop(self.stop)
-      self.gui.connect_save(self.save)
-      self.gui.connect_open(self.load)
-    else:
-      print "GUI disabled."
+    self.gui = GUI(layout)
+    self.gui.connect_new(self.reset)
+    self.gui.connect_play(self.play)
+    self.gui.connect_pause(self.pause)
+    self.gui.connect_stop(self.stop)
+    self.gui.connect_save(self.save)
+    self.gui.connect_open(self.load)
 
     # Set up audio (or not).
-    self.audio_enabled = audio_enabled
-    if audio_enabled:
-      self.audio = Audio()
-      if self.gui_enabled:
-        self.gui.connect_record(self.record)
-    else:
-      print "Audio disabled."
+    self.audio = Audio()
+    self.gui.connect_record(self.record)
+
+    if not audio_enabled: print 'Audio disabled'
+    if not gui_enabled: print 'GUI disabled'
 
   def reset(self):
     '''Clears the state of the canvas and audio, as if the system had just
     started.'''
     if not self.gui.canvas.dirty or self.gui.dirty_ok():
+      print 'resetting'
       self.gui.canvas.reset()
-      if self.audio_enabled:
-        self.audio.reset()
+      self.audio.reset()
+    else:
+      print 'not resetting'
 
   def run(self, fname = None):
     '''Runs the program.'''
@@ -272,8 +288,7 @@ class Deskcorder:
       self.stop()
       self.gui.play_pressed(True)
 
-    if self.audio_enabled:
-      self.audio.play_init()
+    self.audio.play_init()
 
     now = time.time()
 
@@ -291,7 +306,10 @@ class Deskcorder:
     self.video_done = False
 
     self.gui.canvas.clear() # HACK to clear initially
-    self.gui.timeout_add(100, self.play_tick)
+    self.gui.timeout_add(50, self.play_tick)
+
+  def earliest_event_time(self):
+    return min(self.audio.get_time_of_first_event(), self.gui.canvas.trace.first().first().first().t)
 
   def play_tick(self):
     '''Do one 'tick' in the process of playing back what's stored in this
@@ -302,19 +320,31 @@ class Deskcorder:
 
     # dt is the difference between when the trace was recorded and when the
     # play button was hit.
-    dt = self.play_time - self.trace[0].t
+    dt = self.play_time - self.earliest_event_time()
     for pause in self.break_times:
       dt += pause[1] - pause[0]
 
     now = time.time()
 
-    if self.audio_enabled and self.audio.is_playing():
+    if self.audio.is_playing():
       a_start = self.audio.get_current_audio_start_time()
       a_time = self.audio.get_s_played()
-      if a_start >= 0:
+      print 'type(a_time):%s' % str(type(a_time))
+      print 'audio: [%.3f,%.3f]' % (a_start, a_time)
+      if a_start > 0:
         self.audio.play_tick(now - dt)
-        if a_time >= 0:
-          dt = a_start + dt + a_time - now + dt
+        if a_time > 0:
+          a_prog = a_start + a_time - self.earliest_event_time()
+          v_prog = now - self.play_time
+          print 'audio:%3.2f' % a_prog
+          print 'video:%3.2f' % v_prog
+          print 'dt was %.2f' % dt
+          dt += a_prog - v_prog
+          print 'dt  is %.2f' % dt
+
+    progress = now - dt
+
+    print 'Progress: %.3fs' % progress
 
     # I'm simulating a do-while loop here.  This one is basically:
     #  1. While we still have stuff to iterate over, iterate.
@@ -326,12 +356,16 @@ class Deskcorder:
     #     false (stop calling this function).
     while True:
       slide = self.trace[self.slide_i]
-      if slide.t + dt <= now and self.point_i == 0 and self.stroke_i == 0:
+      # if we are after the slide's clear time but are still on the first point
+      # of its first stroke, then clear the canvas.
+      if slide.t <= progress and self.point_i == 0 and self.stroke_i == 0:
         self.gui.canvas.clear()
+
       stroke = slide[self.stroke_i]
       if len(stroke) > 0:
+
         point = stroke[self.point_i]
-        if point.t + dt <= now:
+        if point.t <= progress:
           if self.point_i > 1:
             self.gui.canvas.draw(stroke.color, point.p, stroke[self.point_i-2].pos, stroke[self.point_i-1].pos, stroke[self.point_i].pos)
           elif self.point_i > 0:
@@ -342,7 +376,7 @@ class Deskcorder:
           return True
 
       if not self.play_iters_inc():
-        if not self.audio_enabled or self.audio.get_current_audio_start_time() < 0:
+        if self.audio.get_current_audio_start_time() < 0:
           self.stop()
           return False
         return True
@@ -379,14 +413,12 @@ class Deskcorder:
       if self.last_pause == None:
         self.last_pause = t
         self.gui.pause_pressed(True)
-        if self.audio_enabled:
-          self.audio.pause()
+        self.audio.pause()
       else:
         self.break_times.append((self.last_pause, t))
         self.last_pause = None
         self.gui.pause_pressed(False)
-        if self.audio_enabled:
-          self.audio.unpause()
+        self.audio.unpause()
     else:
       self.gui.pause_pressed(False)
 
@@ -397,10 +429,7 @@ class Deskcorder:
   def done(self):
     '''The drawing portion is done playing back.  Wait for the speech portion
     to finish also.'''
-    if self.audio_enabled:
-      gobject.timeout_add(100, self.check_done)
-    else:
-      self.stop()
+    gobject.timeout_add(100, self.check_done)
 
   def check_done(self):
     if not self.audio.is_playing():
@@ -409,10 +438,9 @@ class Deskcorder:
     return True
 
   def stop(self):
-    if self.audio_enabled:
-      self.audio.stop()
     if self.is_paused():
       self.pause(time.time())
+    self.audio.stop()
     self.gui.record_pressed(False)
     self.gui.play_pressed(False)
     self.gui.canvas.unfreeze()
@@ -437,19 +465,14 @@ class Deskcorder:
       self.save_dcb(fname)
     self.gui.canvas.dirty = False
 
-  def get_audio_data(self):
-    '''Convenience function that returns the audio data or [] if audio is
-    disabled.'''
-    return self.audio.data if self.audio_enabled else []
-
   def save_dcx(self, fname = "strokes.dcx"):
-    recorder.save_dcx(fname, self.gui.canvas.trace.make_trace_data(), self.gui.canvas.trace.make_position_data(), self.get_audio_data())
+    recorder.save_dcx(fname, self.gui.canvas.trace, self.audio.make_data())
 
   def save_dct(self, fname = "strokes.dct"):
-    recorder.save_dct(fname, self.gui.canvas.trace.make_trace_data())
+    recorder.save_dct(fname, self.gui.canvas.trace, self.audio.make_data())
 
   def save_dcb(self, fname = "strokes.dcb"):
-    recorder.save_dcb(fname, self.gui.canvas.trace.make_trace_data(), self.gui.canvas.trace.make_position_data(), self.get_audio_data())
+    recorder.save_dcb(fname, self.gui.canvas.trace, self.audio.make_data())
 
   def load(self, fname = 'save.dcb'):
     if fname.lower().endswith('.dcx'):
@@ -461,22 +484,16 @@ class Deskcorder:
     self.gui.canvas.dirty = False
 
   def load_dcb(self, fname = 'save.dcb'):
-    t,p,a = recorder.load_dcb(fname)
-    self.gui.canvas.trace.load_trace_data(t)
-    self.gui.canvas.trace.load_position_data(p)
-    self.audio.data = a
+    self.gui.canvas.trace, a = recorder.load_dcb(fname)
+    self.audio.load_data(a)
 
   def load_dcx(self, fname = 'save.dcx'):
-    t,p,a = recorder.load_dcx(fname)
-    self.gui.canvas.trace.load_trace_data(t)
-    self.gui.canvas.trace.load_position_data(p)
-    self.audio.data = a
+    self.gui.canvas.trace, a = recorder.load_dcx(fname)
+    self.audio.load_data(a)
 
   def load_dct(self, fname = 'save.dcx'):
-    t,p,a = recorder.load_dct(fname)
-    self.gui.canvas.trace.load_trace_data(t)
-    self.gui.canvas.trace.load_position_data(p)
-    self.audio.data = a
+    self.gui.canvas.trace, a = recorder.load_dct(fname)
+    self.audio.load_data(a)
 
 
 
