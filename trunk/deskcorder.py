@@ -88,11 +88,14 @@ class Trace(object):
   def get_points(self):
     return [point for stroke in self.get_strokes() for point in stroke.points]
 
-  def get_time_of_first_event(self):
+  def get_first_event(self):
     try:
-      return self.slides[0].strokes[0].points[0].t
+      return self.slides[0].strokes[0].points[0]
     except IndexError:
-      return -1
+      return None
+
+  def get_time_of_first_event(self):
+    return self.get_first_event().t
 
 
 class Slide(object):
@@ -221,16 +224,15 @@ class Deskcorder:
     self.break_times = []
     self.last_pause = None
 
+    self.audio = Audio()
     self.gui = GUI(layout)
+
     self.gui.connect_new(self.reset)
     self.gui.connect_play(self.play)
     self.gui.connect_pause(self.pause)
     self.gui.connect_stop(self.stop)
     self.gui.connect_save(self.save)
     self.gui.connect_open(self.load)
-
-    # Set up audio (or not).
-    self.audio = Audio()
     self.gui.connect_record(self.record)
 
     if not audio_enabled: print 'Audio disabled'
@@ -280,6 +282,7 @@ class Deskcorder:
 
   def play(self, active):
     '''Start/stop playing what's in this file.'''
+    print 'play(%s)' % str(active)
     if not active:
       self.stop()
       return
@@ -309,7 +312,11 @@ class Deskcorder:
     self.gui.timeout_add(50, self.play_tick)
 
   def earliest_event_time(self):
-    return min(self.audio.get_time_of_first_event(), self.gui.canvas.trace.first().first().first().t)
+    try:
+      canvas_t = self.gui.canvas.trace.first().first().first().t
+      return min(self.audio.get_time_of_first_event(), canvas_t)
+    except AttributeError:
+      return self.audio.get_time_of_first_event()
 
   def play_tick(self):
     '''Do one 'tick' in the process of playing back what's stored in this
@@ -407,15 +414,16 @@ class Deskcorder:
     self.video_done = True
     return False
 
-  def pause(self, t):
+  def pause(self, checked):
     '''Pauses playback and audio recording.'''
+    now = time.time()
     if self.is_playing():
       if self.last_pause == None:
-        self.last_pause = t
+        self.last_pause = now
         self.gui.pause_pressed(True)
         self.audio.pause()
       else:
-        self.break_times.append((self.last_pause, t))
+        self.break_times.append((self.last_pause, now))
         self.last_pause = None
         self.gui.pause_pressed(False)
         self.audio.unpause()
@@ -429,7 +437,7 @@ class Deskcorder:
   def done(self):
     '''The drawing portion is done playing back.  Wait for the speech portion
     to finish also.'''
-    gobject.timeout_add(100, self.check_done)
+    self.gui.timeout_add(100, self.check_done)
 
   def check_done(self):
     if not self.audio.is_playing():
@@ -463,16 +471,18 @@ class Deskcorder:
       self.save_dct(fname)
     else:
       self.save_dcb(fname)
-    self.gui.canvas.dirty = False
 
   def save_dcx(self, fname = "strokes.dcx"):
     recorder.save_dcx(fname, self.gui.canvas.trace, self.audio.make_data())
+    self.gui.canvas.dirty = False
 
   def save_dct(self, fname = "strokes.dct"):
     recorder.save_dct(fname, self.gui.canvas.trace, self.audio.make_data())
+    self.gui.canvas.dirty = False
 
   def save_dcb(self, fname = "strokes.dcb"):
     recorder.save_dcb(fname, self.gui.canvas.trace, self.audio.make_data())
+    self.gui.canvas.dirty = False
 
   def load(self, fname = 'save.dcb'):
     if fname.lower().endswith('.dcx'):
@@ -481,19 +491,21 @@ class Deskcorder:
       self.load_dct(fname)
     else:
       self.load_dcb(fname)
-    self.gui.canvas.dirty = False
 
   def load_dcb(self, fname = 'save.dcb'):
     self.gui.canvas.trace, a = recorder.load_dcb(fname)
     self.audio.load_data(a)
+    self.gui.canvas.dirty = False
 
   def load_dcx(self, fname = 'save.dcx'):
     self.gui.canvas.trace, a = recorder.load_dcx(fname)
     self.audio.load_data(a)
+    self.gui.canvas.dirty = False
 
   def load_dct(self, fname = 'save.dcx'):
     self.gui.canvas.trace, a = recorder.load_dct(fname)
     self.audio.load_data(a)
+    self.gui.canvas.dirty = False
 
 
 
@@ -522,16 +534,25 @@ def parse_args(args):
   return fname, audio, video
 
 if __name__ == '__main__':
-  VALID_V_MODULES = ['qtgui', 'gtkgui']
-  VALID_A_MODULES = ['qtaudio', 'alsa']
+  # Lists of GUI modules with their layouts.
+  V_MODULE_FILES = {'qtgui': 'layout.ui',
+                   'gtkgui': 'layout.glade',
+                    'dummy': None}
+
+  # valid video modules in preferred order
+  VALID_V_MODULES = ['gtkgui', 'qtgui', 'dummy']
+
+  # valid audio modules in preferred order
+  VALID_A_MODULES = ['alsa', 'qtaudio', 'dummy']
 
   fname, audio, video = parse_args(sys.argv[1:])
 
   if audio is not None:
     try:
       Audio = __import__(audio).Audio
-    except ImportError:
+    except AttributeError:
       audio = None
+      print 'audio module "%s" not found' % audio
 
   if audio is None:
     for a in VALID_A_MODULES:
@@ -539,17 +560,16 @@ if __name__ == '__main__':
         Audio = __import__(a).Audio
         audio = a
         break
-      except ImportError:
+      except AttributeError:
         pass
-    if a is None:
-      from dummy import Audio
 
   if video is not None:
     try:
       Canvas = __import__(video).Canvas
       GUI = __import__(video).GUI
-    except ImportError:
+    except AttributeError:
       video = None
+      print 'video module "%s" not found' % video
 
   if video is None:
     for v in VALID_V_MODULES:
@@ -558,9 +578,11 @@ if __name__ == '__main__':
         GUI = __import__(v).GUI
         video = v
         break
-      except ImportError:
+      except AttributeError:
         pass
-    if video is None:
-      from dummy import GUI, Canvas
 
-  Deskcorder("layout.glade").run(fname)
+  print 'using %s audio and %s gui' % (audio, video)
+  if video in VALID_V_MODULES:
+    Deskcorder(V_MODULE_FILES[video]).run(fname)
+  else:
+    Deskcorder(None).run(fname)

@@ -97,7 +97,7 @@ def save_dcb(fname = 'save.dcb', trace = None, audiofiles = [], req_v = DC_REC_V
   f.write(DCB_MAGIC_NUMBER)
   f.write(struct.pack("<III", 0, 1, 1))  # file version
   f.write(struct.pack("<I", len(trace)))
-  f_log.write('File will have %d slides\n' % (len(trace) / 2))
+  f_log.write('File will have %d slides\n' % len(trace.slides))
   for slide in trace.slides:
     f.write(struct.pack("<QI", int(slide.t * 1000), len(slide))) # tstamp & number of strokes
     f_log.write('  slide: %d strokes at %.0fms' % (len(slide), slide.t))

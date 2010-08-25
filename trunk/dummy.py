@@ -27,7 +27,7 @@ class Audio:
   def play_tick(self, ttpt = None):
     return False
   def is_playing(self):
-    return return False
+    return False
   def get_s_played(self):
     return -1
   def get_time_of_first_event(self):
