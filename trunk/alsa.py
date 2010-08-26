@@ -158,6 +158,9 @@ class Audio:
   def get_time_of_first_event(self):
     return self.data[0][0] if len(self.data) > 0 else -1
 
+  def get_time_of_last_event(self):
+    return (self.data[-1][0] + (self.period_size * len(self.data[-1][1]) / float(self.bytes_per_second))) if len(self.data) else 0
+
   def get_current_audio_start_time(self):
     try:
       return self.data[self.data_iter][0]
