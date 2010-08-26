@@ -225,6 +225,11 @@ class GUI:
     self.play_button = self.glade_tree.get_widget("play")
     self.pause_button = self.glade_tree.get_widget("pause")
     self.stop_button = self.glade_tree.get_widget("stop")
+    self.progress_bar = self.glade_tree.get_widget("progress-bar")
+    self.pback_await = self.glade_tree.get_widget("playback/await")
+
+#    self.play_button.connect("toggled", self.update_pbar)
+    self.pbar_timer_id = None
 
     # pen widths
     self.glade_tree.get_widget("thin").connect("toggled",
@@ -282,6 +287,27 @@ class GUI:
 
     self.canvas.set_extension_events(gtk.gdk.EXTENSION_EVENTS_ALL)
 
+  def pbar_should_update(self):
+    return self.pbar_timer_id is not None
+
+  def update_pbar(self, w):
+    if w.get_active():
+      if self.pbar_timer_id is None:
+        self.pbar_timer_id = gobject.timeout_add(1000, self.pbar_queue_redraw)
+        print 'setting pbar_timer_id = %d' % self.pbar_timer_id
+    else:
+      if self.pbar_timer_id is not None:
+        gobject.timeout_remove(self.pbar_timer_id)
+        self.pbar_timer_id = None
+        print 'stopped pbar_timer_id'
+
+  def pbar_queue_redraw(self):
+    if self.pbar_timer_id is not None:
+      print 'queue'
+      self.progress_bar.send_expose()
+      return True
+    return False
+
   def quit(self, event):
     if not self.canvas.dirty or self.dirty_ok():
       gtk.main_quit()
@@ -335,16 +361,16 @@ class GUI:
     self.glade_tree.get_widget("new").connect("clicked", lambda x: fun())
 
   def connect_record(self, fun):
-    self.record_button.connect("toggled", lambda x: fun(x.get_active()))
+    self.record_button.connect("toggled", lambda w: fun(w.get_active()))
 
   def connect_play(self, fun):
-    self.play_button.connect("toggled", lambda x: fun(x.get_active()))
+    self.play_button.connect("toggled", lambda w: fun(w.get_active()))
 
   def connect_pause(self, fun):
-    self.pause_button.connect("toggled", lambda x: fun(x.get_active()))
+    self.pause_button.connect("toggled", lambda w: fun(w.get_active()))
 
   def connect_stop(self, fun):
-    self.stop_button.connect("clicked", lambda x: fun())
+    self.stop_button.connect("clicked", lambda w: fun())
 
   def connect_save(self, fun):
     self.save_fun = fun
@@ -352,26 +378,43 @@ class GUI:
   def connect_open(self, fun):
     self.open_fun = fun
 
+  def connect_progress_fmt(self, fun):
+    self.progress_bar.connect("format-value", lambda s,v: fun(v))
+
 
   # ---- buttons -------------------------
 
   def record_pressed(self, state = None):
-    if state == None:
+    if state is None:
       return self.record_button.get_active()
     else:
       self.record_button.set_active(state)
 
   def play_pressed(self, state = None):
-    if state == None:
+    if state is None:
       return self.play_button.get_active()
     else:
       self.play_button.set_active(state)
 
   def pause_pressed(self, state = None):
-    if state == None:
+    if state is None:
       return self.pause_button.get_active()
     else:
       self.pause_button.set_active(state)
+
+  def audio_wait_pressed(self, state = None):
+    if state is None:
+      return self.pback_await.get_active()
+    else:
+      self.pback_await.set_active(state)
+
+  def progress_slider_value(self, val = None):
+    if val is None:
+      print 'returning value'
+      return self.progress_bar.get_value()
+    else:
+      self.progress_bar.set_value(val)
+      self.progress_bar.queue_draw()
 
   def timeout_add(self, delay, fun):
     gobject.timeout_add(delay, fun)

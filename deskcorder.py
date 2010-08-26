@@ -95,7 +95,22 @@ class Trace(object):
       return None
 
   def get_time_of_first_event(self):
-    return self.get_first_event().t
+    f = self.get_first_event()
+    return f.t if f is not None else -1
+
+  def get_last_event(self):
+    try:
+      return self.slides[-1].strokes[-1].points[-1]
+    except IndexError:
+      return None
+
+  def get_time_of_last_event(self):
+    l = self.get_last_event()
+    return l.t if l is not None else -1
+
+  def get_duration(self):
+    '''Computes the duration in s of the trace.'''
+    return self.get_time_of_last_event() - self.get_time_of_first_event()
 
 
 class Slide(object):
@@ -220,9 +235,9 @@ class Deskcorder:
   def __init__(self, layout, gui_enabled=True, audio_enabled=True):
     # Playback variables.
     self.play_time = None
-    self.play_timer_id = None
     self.break_times = []
     self.last_pause = None
+    self.progress = -1
 
     self.audio = Audio()
     self.gui = GUI(layout)
@@ -234,9 +249,28 @@ class Deskcorder:
     self.gui.connect_save(self.save)
     self.gui.connect_open(self.load)
     self.gui.connect_record(self.record)
+    self.gui.connect_progress_fmt(self.fmt_progress)
 
     if not audio_enabled: print 'Audio disabled'
     if not gui_enabled: print 'GUI disabled'
+
+  def get_duration(self):
+    start_t = self.earliest_event_time()
+    end_t = self.latest_event_time()
+    if start_t >= 0 and end_t >= 0:
+      return end_t - start_t
+    else:
+      return .0
+
+  def earliest_event_time(self):
+    video_t = self.gui.canvas.trace.get_time_of_first_event()
+    audio_t = self.audio.get_time_of_first_event()
+    return min(audio_t, video_t) if video_t >= 0 else audio_t
+
+  def latest_event_time(self):
+    video_t = self.gui.canvas.trace.get_time_of_last_event()
+    audio_t = self.audio.get_time_of_last_event()
+    return max(audio_t, video_t) if video_t >= 0 else audio_t
 
   def reset(self):
     '''Clears the state of the canvas and audio, as if the system had just
@@ -278,16 +312,26 @@ class Deskcorder:
 
   def is_playing(self):
     '''Determines if this is playing or not.'''
-    return self.play_time is not None
+    return self.progress >= 0 and self.progress <= self.get_duration()
 
   def play(self, active):
     '''Start/stop playing what's in this file.'''
     print 'play(%s)' % str(active)
     if not active:
-      self.stop()
+      if self.is_paused():
+        print 'paused'
+        self.gui.play_pressed(True)
+        self.gui.pause_pressed(False)
+      else:
+        print 'stopping'
+        self.stop()
+      return
+    elif self.is_playing():
+      print 'forget it'
       return
 
     if self.is_recording():
+      print 'end REC'
       self.stop()
       self.gui.play_pressed(True)
 
@@ -295,12 +339,8 @@ class Deskcorder:
 
     now = time.time()
 
-    if self.is_playing() and self.is_paused():
-      self.pause(now)
-
     self.gui.canvas.freeze()
     self.trace = self.gui.canvas.trace
-    self.play_time = now
 
     # Playback iterators.
     self.slide_i = 0
@@ -308,15 +348,14 @@ class Deskcorder:
     self.point_i = 0
     self.video_done = False
 
-    self.gui.canvas.clear() # HACK to clear initially
-    self.gui.timeout_add(50, self.play_tick)
+    # prev & curr time play_tick() was called and progress in seconds.
+    self.play_time = now
+    self.prev_now = now
+    self.curr_now = self.prev_now
+    self.progress = 0
 
-  def earliest_event_time(self):
-    try:
-      canvas_t = self.gui.canvas.trace.first().first().first().t
-      return min(self.audio.get_time_of_first_event(), canvas_t)
-    except AttributeError:
-      return self.audio.get_time_of_first_event()
+    self.gui.canvas.clear() # XXX hack to clear initially for GTK+ version
+    self.gui.timeout_add(50, self.play_tick)
 
   def play_tick(self):
     '''Do one 'tick' in the process of playing back what's stored in this
@@ -324,34 +363,24 @@ class Deskcorder:
 
     if not self.is_playing(): return False
     if self.is_paused(): return True
+    if self.get_duration() <= 0: return False
 
-    # dt is the difference between when the trace was recorded and when the
-    # play button was hit.
-    dt = self.play_time - self.earliest_event_time()
-    for pause in self.break_times:
-      dt += pause[1] - pause[0]
-
-    now = time.time()
-
+    self.prev_now = self.curr_now
+    self.curr_now = time.time()
+    self.progress += self.curr_now - self.prev_now
     if self.audio.is_playing():
       a_start = self.audio.get_current_audio_start_time()
       a_time = self.audio.get_s_played()
-      print 'type(a_time):%s' % str(type(a_time))
-      print 'audio: [%.3f,%.3f]' % (a_start, a_time)
       if a_start > 0:
-        self.audio.play_tick(now - dt)
+        self.audio.play_tick(self.progress + self.earliest_event_time())
+        if a_time <= 0 and not self.gui.audio_wait_pressed():
+          a_time = .01
         if a_time > 0:
-          a_prog = a_start + a_time - self.earliest_event_time()
-          v_prog = now - self.play_time
-          print 'audio:%3.2f' % a_prog
-          print 'video:%3.2f' % v_prog
-          print 'dt was %.2f' % dt
-          dt += a_prog - v_prog
-          print 'dt  is %.2f' % dt
+          self.progress = a_start + a_time - self.earliest_event_time()
 
-    progress = now - dt
-
-    print 'Progress: %.3fs' % progress
+    self.gui.progress_slider_value(self.progress / self.get_duration())
+    ttpt = self.progress + self.earliest_event_time()
+    print 'progress: %.1fs' % self.progress
 
     # I'm simulating a do-while loop here.  This one is basically:
     #  1. While we still have stuff to iterate over, iterate.
@@ -361,18 +390,20 @@ class Deskcorder:
     #     pointed at is too old, return True (run the function again later).
     #  4. When out iterator goes past the end of the trace object, return
     #     false (stop calling this function).
-    while True:
+    while not self.video_done:
       slide = self.trace[self.slide_i]
       # if we are after the slide's clear time but are still on the first point
       # of its first stroke, then clear the canvas.
-      if slide.t <= progress and self.point_i == 0 and self.stroke_i == 0:
+      if slide.t <= ttpt and self.point_i == 0 and self.stroke_i == 0:
         self.gui.canvas.clear()
 
-      stroke = slide[self.stroke_i]
+      try:
+        stroke = slide[self.stroke_i]
+      except IndexError:
+        print 'IndexError: trace[%d][%d][%d]' % (self.slide_i, self.stroke_i, self.point_i)
       if len(stroke) > 0:
-
         point = stroke[self.point_i]
-        if point.t <= progress:
+        if point.t <= ttpt:
           if self.point_i > 1:
             self.gui.canvas.draw(stroke.color, point.p, stroke[self.point_i-2].pos, stroke[self.point_i-1].pos, stroke[self.point_i].pos)
           elif self.point_i > 0:
@@ -382,11 +413,10 @@ class Deskcorder:
         else:
           return True
 
-      if not self.play_iters_inc():
-        if self.audio.get_current_audio_start_time() < 0:
-          self.stop()
-          return False
-        return True
+      if not self.play_iters_inc() and a_time < 0:
+        self.stop()
+        return False
+    return self.check_done()
 
 
   def play_iters_inc(self):
@@ -430,7 +460,6 @@ class Deskcorder:
     else:
       self.gui.pause_pressed(False)
 
-
   def is_paused(self):
     return self.last_pause is not None
 
@@ -440,12 +469,14 @@ class Deskcorder:
     self.gui.timeout_add(100, self.check_done)
 
   def check_done(self):
-    if not self.audio.is_playing():
+    '''Returns True if this should keep playing, False otherwise.'''
+    if not self.is_playing():
       self.stop()
       return False
     return True
 
   def stop(self):
+    print 'STOP'
     if self.is_paused():
       self.pause(time.time())
     self.audio.stop()
@@ -455,6 +486,15 @@ class Deskcorder:
     self.last_pause = None
     self.break_times = []
     self.play_time = None
+    self.progress = -1
+
+  def fmt_progress(self, val):
+    dur = self.get_duration()
+    total = '%d:%02d' % (dur / 60, dur % 60)
+    if self.is_playing():
+      return '%d:%02d / %s' % (self.progress / 60, self.progress % 60, total)
+    else:
+      return '0:00 / %s' % (total)
 
 
 
