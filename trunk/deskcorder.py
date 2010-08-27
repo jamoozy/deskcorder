@@ -182,6 +182,15 @@ class Stroke(object):
     '''Returns [] (not None) if empty so len() works.'''
     return self.points[-1] if len(self.points) > 0 else []
 
+  def r(self):
+    return self.color[0]
+
+  def g(self):
+    return self.color[1]
+
+  def b(self):
+    return self.color[2]
+
   def append(self, pos, t = None, r = None):
     if type(pos) == tuple:
       self.points.append(Point(pos, t, r))
@@ -249,11 +258,37 @@ class Deskcorder:
     self.gui.connect_open(self.load)
     self.gui.connect_record(self.record)
     self.gui.connect_progress_fmt(self.fmt_progress)
+    self.gui.connect_progress_moved(self.move_progress)
+    self.gui.connect_exp_png(self.exp_png)
+    self.gui.connect_exp_pdf(self.exp_pdf)
 
     if not audio_enabled: print 'Audio disabled'
     if not gui_enabled: print 'GUI disabled'
 
     self.progress = -1
+
+  def set_progress(self, val):
+    self.progress = val
+    self.audio.set_progress(val + self.earliest_event_time())
+    self.gui.canvas.ttpt = val + self.earliest_event_time()
+    self.reset_iters_to_progress()
+
+  def reset_iters_to_progress(self):
+    self.slide_i = 0
+    self.stroke_i = 0
+    self.point_i = 0
+
+    ttpt = self.progress + self.earliest_event_time()
+    for i in xrange(1,len(self.gui.canvas.trace)):
+      if self.gui.canvas.trace[i].t > ttpt:
+        self.slide_i = i - 1
+        while not self.play_iters_valid():
+          continue
+        return
+
+    self.slide_i = len(self.gui.canvas.trace) - 1
+    while not self.play_iters_valid():
+      continue
 
   def get_duration(self):
     start_t = self.earliest_event_time()
@@ -392,17 +427,14 @@ class Deskcorder:
     #     pointed at is too old, return True (run the function again later).
     #  4. When out iterator goes past the end of the trace object, return
     #     false (stop calling this function).
-    while not self.video_done:
+    while not self.video_done and self.play_iters_valid():
       slide = self.trace[self.slide_i]
       # if we are after the slide's clear time but are still on the first point
       # of its first stroke, then clear the canvas.
       if slide.t <= ttpt and self.point_i == 0 and self.stroke_i == 0:
         self.gui.canvas.clear()
 
-      try:
-        stroke = slide[self.stroke_i]
-      except IndexError:
-        print 'IndexError: trace[%d][%d][%d]' % (self.slide_i, self.stroke_i, self.point_i)
+      stroke = slide[self.stroke_i]
       if len(stroke) > 0:
         point = stroke[self.point_i]
         if point.t <= ttpt:
@@ -420,6 +452,12 @@ class Deskcorder:
         return False
     return self.check_done()
 
+  def play_iters_valid(self):
+    if self.slide_i < len(self.trace):
+      if self.stroke_i < len(self.trace[self.slide_i]):
+        if self.point_i < len(self.trace[self.slide_i][self.stroke_i]):
+          return True
+    return self.play_iters_inc()
 
   def play_iters_inc(self):
     '''Increments all the iterators that have to do with the playing
@@ -428,17 +466,17 @@ class Deskcorder:
       if len(self.trace[self.slide_i]) > 0:
         self.point_i += 1
         if self.point_i < len(self.trace[self.slide_i][self.stroke_i]):
-          return True
+          return self.play_iters_valid()
         self.point_i = 0
 
         self.stroke_i += 1
         if self.stroke_i < len(self.trace[self.slide_i]):
-          return True
+          return self.play_iters_valid()
         self.stroke_i = 0
 
       self.slide_i += 1
       if self.slide_i < len(self.trace):
-        return True
+        return self.play_iters_valid()
 
     self.slide_i = 0
     self.stroke_i = 0
@@ -498,11 +536,22 @@ class Deskcorder:
     else:
       return '0:00 / %s' % (total)
 
+  def move_progress(self, val):
+    self.gui.play_pressed(True)
+    self.gui.pause_pressed(True)
+    self.set_progress(val * self.get_duration())
+
 
 
   ############################################################################
   # ------------------------------ File I/O -------------------------------- #
   ############################################################################
+
+  def exp_png(self, fname):
+    print 'not exporting to %s.png' % fname
+
+  def exp_pdf(self, fname):
+    print 'not exporting to %s.pdf' % fname
 
   def save(self, fname = 'save.dcb'):
     if self.is_recording():
@@ -577,10 +626,7 @@ def parse_args(args):
 
 if __name__ == '__main__':
   # valid video modules in preferred order
-  VALID_V_MODULES = ['gtkgui', 'qtgui', 'dummy']
-
-  # valid audio modules in preferred order
-  VALID_A_MODULES = ['alsa', 'qtaudio', 'dummy']
+  VALID_AV_MODULES = ['linux', 'mac', 'qt', 'dummy']
 
   fname, audio, video = parse_args(sys.argv[1:])
 
@@ -592,7 +638,7 @@ if __name__ == '__main__':
       print 'audio module "%s" not found' % audio
 
   if audio is None:
-    for a in VALID_A_MODULES:
+    for a in VALID_AV_MODULES:
       try:
         Audio = __import__(a).Audio
         audio = a
@@ -609,9 +655,8 @@ if __name__ == '__main__':
       print 'video module "%s" not found' % video
 
   if video is None:
-    for v in VALID_V_MODULES:
+    for v in VALID_AV_MODULES:
       try:
-        Canvas = __import__(v).Canvas
         GUI = __import__(v).GUI
         video = v
         break
