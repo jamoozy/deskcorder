@@ -1,3 +1,4 @@
+# for the GUI
 import pygtk
 pygtk.require('2.0')
 import gtk
@@ -5,6 +6,10 @@ import gtk.glade
 import gobject
 import cairo
 
+# for audio
+import alsaaudio
+
+# for both
 import time
 import math
 import sys
@@ -53,8 +58,8 @@ class Canvas(gtk.DrawingArea):
 
     self.set_events(gtk.gdk.POINTER_MOTION_MASK  | gtk.gdk.BUTTON_MOTION_MASK | gtk.gdk.BUTTON1_MOTION_MASK | gtk.gdk.BUTTON2_MOTION_MASK | gtk.gdk.BUTTON3_MOTION_MASK | gtk.gdk.BUTTON_PRESS_MASK | gtk.gdk.BUTTON_RELEASE_MASK)
 
-    self.connect("configure-event", self.gtk_configure)
-    self.connect("expose-event", self.gtk_expose)
+    self.connect("configure-event", lambda w, e: self.draw_all())
+    self.connect("expose-event", lambda w, e: self.gtk_expose())
     self.connect("motion-notify-event", self.gtk_motion)
     self.connect("button-press-event", self.gtk_button_press)
     self.connect("button-release-event", self.gtk_button_release)
@@ -96,7 +101,7 @@ class Canvas(gtk.DrawingArea):
           else:
             return
 
-  def gtk_configure(self, widget, event):
+  def draw_all(self):
     self.size = self.window.get_size()
     self.raster = self.window.cairo_create().get_target().create_similar(cairo.CONTENT_COLOR, self.size[0], self.size[1])
     self.raster_cr = cairo.Context(self.raster)
@@ -146,8 +151,8 @@ class Canvas(gtk.DrawingArea):
       self.oldPos = None
       self.oldRad = None
 
-  def gtk_expose(self, widget, event):
-    cr = widget.window.cairo_create()
+  def gtk_expose(self):
+    cr = self.window.cairo_create()
     cr.set_source_surface(self.raster, 0.0, 0.0)
     cr.paint()
     cr.set_line_width(2)
@@ -181,6 +186,10 @@ class Canvas(gtk.DrawingArea):
     self.positions = []
     self.dirty = False
     self.frozen = False
+
+  def redraw(self):
+    self.clear()
+    self.draw_all()
 
   def draw(self, color, r, pos1, pos2=None, pos3=None):
     self.raster_cr.set_source_rgba(color[0], color[1], color[2], 1.0)
@@ -252,6 +261,12 @@ class GUI:
     self.progress_bar = self.glade_tree.get_widget("progress-bar")
     self.pback_await = self.glade_tree.get_widget("playback/await")
 
+    # import/export
+    self.glade_tree.get_widget('file/exp-png').connect("activate",
+        lambda x: self.exp_png())
+    self.glade_tree.get_widget('file/exp-pdf').connect("activate",
+        lambda x: self.exp_pdf())
+
     # pen widths
     self.glade_tree.get_widget("thin").connect("toggled",
         lambda x: x.get_active() and self.canvas.setRadius(1.5))
@@ -305,6 +320,9 @@ class GUI:
 
     self.save_fun = None
     self.open_fun = None
+    self.exp_pdf_fun = None
+    self.exp_png_fun = None
+    self.imp_pdf_fun = None
 
     self.canvas.set_extension_events(gtk.gdk.EXTENSION_EVENTS_ALL)
 
@@ -313,9 +331,31 @@ class GUI:
       gtk.main_quit()
 
 
+  # -------- Import/Export dialogues.
+  
+  def exp_png(self):
+    if self.exp_png_fun is None:
+      self.int_err('Export to PNG functionality disabled.')
+      return
+
+  def exp_pdf(self):
+    if self.exp_pdf_fun is None:
+      self.int_err('Export to PDF functionality disabled.')
+      return
+
+  def imp_pdf(self):
+    if self.exp_pdf_fun is None:
+      self.int_err('Import from PDF functionality disabled.')
+      return
+
+
   # -------- Load/Save dialogues.
 
   def open(self):
+    if self.open_fun is None:
+      self.int_err("Open functionality disabled.")
+      return
+
     if self.canvas.dirty and not self.dirty_open_ok(): return
     fcd = gtk.FileChooserDialog('Choose a file to save', None,
         gtk.FILE_CHOOSER_ACTION_OPEN, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
@@ -329,6 +369,10 @@ class GUI:
     fcd.destroy()
 
   def save(self):
+    if self.save_fun is None:
+      self.int_err("Save functionality disabled.")
+      return
+
     if self.last_fname:
       self.save_fun(self.last_fname)
       return True
@@ -336,6 +380,10 @@ class GUI:
       return self.save_as()
 
   def save_as(self):
+    if self.open_fun is None:
+      self.int_err("Save-as functionality disabled.")
+      return
+
     fcd = gtk.FileChooserDialog('Choose a file to save', None,
         gtk.FILE_CHOOSER_ACTION_SAVE, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
           gtk.STOCK_SAVE, gtk.RESPONSE_ACCEPT))
@@ -397,7 +445,11 @@ class GUI:
       print 'Unknown button: %d' % rtn
       return False
 
-  
+  def int_err(self, msg):
+    '''Internal error notification dialog box.'''
+    d = gtk.MessageDialog(None, 0, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, 'Internal Error!  ' + msg)
+    d.run()
+    d.destroy()
 
 
   # -------- Callbacks ---------------------
@@ -418,6 +470,12 @@ class GUI:
   def connect_stop(self, fun):
     self.stop_button.connect("clicked", lambda w: fun())
 
+  def connect_exp_png(self, fun):
+    self.exp_png_fun = fun
+
+  def connect_exp_pdf(self, fun):
+    self.exp_pdf_fun = fun
+
   def connect_save(self, fun):
     self.save_fun = fun
 
@@ -426,6 +484,9 @@ class GUI:
 
   def connect_progress_fmt(self, fun):
     self.progress_bar.connect("format-value", lambda s,v: fun(v))
+
+  def connect_progress_moved(self, fun):
+    self.progress_bar.connect("change-value", lambda w, t, v: fun(max(min(v / 100., 1.), .0)))
 
 
   # ---- buttons -------------------------
@@ -477,3 +538,199 @@ class GUI:
   def deinit(self):
     self.root.hide()
     self.root.destroy()
+
+
+
+class InvalidOperationError(RuntimeError):
+  def __init__(self, msg):
+    RuntimeError.__init__(self, msg)
+
+class Audio:
+  def __init__(self):
+    self.data = []  # K.I.S.S.  Data stored as a string.
+    # next version: store an array of strings.  Do smart things to determine
+    # when no one is talking.
+
+    self.startTime = time.time()
+
+    self.play_start = None
+    self.recording = False
+    self.paused = False
+
+    self.rate = 44100
+    self.channels = 1
+    self.period_size = 1024
+    self.format = alsaaudio.PCM_FORMAT_S16_LE
+    self.bytes_per_second = self.rate * 2
+
+    # Once it's init'd, it will start to collect data, so don't init it until
+    # it's time to record.
+    self.inp = None
+
+    self.out = alsaaudio.PCM(alsaaudio.PCM_PLAYBACK,alsaaudio.PCM_NONBLOCK)
+    self.out.setchannels(self.channels)
+    self.out.setrate(self.rate)
+    self.out.setperiodsize(self.period_size)
+    self.out.setformat(self.format)
+
+  def make_data(self):
+    data = []
+    for d in self.data:
+      data.append([d[0], ''])
+      for p in d[1]:
+        data[-1][1] += p
+    return data
+
+  def load_data(self, data):
+    self.data = []
+    for d in data:
+      self.data.append([d[0], []])
+      i1 = 0
+      i2 = self.period_size
+      while i1 < len(d[1]):
+        self.data[-1][1].append(d[1][i1:i2])
+        i1 = i2
+        i2 += self.period_size
+
+  def print_info(self):
+    print 'Card name: %s' % a.inp.cardname()
+    print ' PCM mode: %d' % a.inp.pcmmode()
+    print ' PCM type: %d' % a.inp.pcmtype()
+
+  def reset(self):
+    self.data = []
+    self.play_start = None
+    self.recording = False
+    self.paused = False
+
+  def is_recording(self):
+    return self.inp is not None
+
+  def set_progress(self, t):
+    if self.is_playing():
+      self.stop()
+
+    self.play_init()
+    if len(self.data) <= 0:
+      return
+
+    self.pause()
+
+    # "fake play" until we're at an appropriate time.
+    while self.get_current_audio_start_time() + self.get_s_played() < t:
+      self.per_iter += 1
+      if self.per_iter >= len(self.data[self.data_iter][1]):
+        self.per_iter = 0
+        self.data_iter += 1
+        if self.data_iter >= len(self.data):
+          self.stop()
+          return
+
+  def record(self, t = None):
+    '''Start recording.  This will not block.  It init's the recording process.
+    This Audio will continue recording until stop() gets called.'''
+    if self.is_playing():
+      raise InvalidOperationError('Already playing.')
+
+    if t is None: t = time.time()
+    self.inp = alsaaudio.PCM(alsaaudio.PCM_CAPTURE,alsaaudio.PCM_NONBLOCK)
+    self.inp.setchannels(self.channels)
+    self.inp.setrate(self.rate)
+    self.inp.setperiodsize(self.period_size)
+    self.inp.setformat(alsaaudio.PCM_FORMAT_S16_LE)
+    self.data.append([t, []])
+    self.recording = True
+    gobject.timeout_add(100, self.record_tick)
+
+  def record_tick(self):
+    while self.recording:
+      l,data = self.inp.read()
+      # Drops 0-length data and data recorded while this is paused.
+      if l > 0:
+        if not self.paused:
+          self.data[-1][1].append(data)
+      else:
+        return True
+    else:
+      return False
+
+  def compress_data(self):
+    '''Turns all list-type data into str-type.'''
+    for i in xrange(len(self.data)):
+      if type(self.data[i][1]) == list:
+        for j in xrange(len(self.data[i][1]) - 1):
+          k = j + 1
+          while len(self.data[i][1][j]) < self.period_size:
+            sz = self.period_size - len(self.data[i][1][j])
+            self.data[i][1][j] += self.data[i][1][k][:sz]
+
+  def play(self):
+    if len(self.data) == 0 or len(self.data[0][1]) == 0:
+      return
+    self.play_init()
+    gobject.timeout_add(100, self.play_tick)
+
+  def play_init(self):
+    self.compress_data()
+    self.play_start = time.time()
+    self.data_iter = 0
+    self.per_iter = 0
+
+  def play_tick(self, ttpt = None):
+    '''ttpt == "time to play to" so that things will only play when they
+    should.'''
+    if self.is_playing():
+      if self.paused: return True
+      # This has the effect of a do-while loop that loops until no more data
+      # can be written to the speakers.
+      while ttpt is None or ttpt >= self.data[self.data_iter][0]:
+        data = self.data[self.data_iter][1][self.per_iter]
+        if self.out.write(data) != 0:
+          self.per_iter += 1
+          if self.per_iter >= len(self.data[self.data_iter][1]):
+            self.per_iter = 0
+            self.data_iter += 1
+            if self.data_iter >= len(self.data):
+              self.stop()
+              return False
+        else:
+          return self.is_playing()
+      return self.is_playing()
+    else:
+      return False
+
+  def is_playing(self):
+    return self.play_start is not None
+
+  def get_s_played(self):
+    '''Computes and returns number of seconds played in this recording.'''
+    if self.is_playing() and len(self.data) > 0 and self.per_iter != 0:
+      return self.period_size * self.per_iter / float(self.bytes_per_second)
+    else:
+      return -1
+
+  def get_time_of_first_event(self):
+    return self.data[0][0] if len(self.data) > 0 else -1
+
+  def get_time_of_last_event(self):
+    return (self.data[-1][0] + (self.period_size * len(self.data[-1][1]) / float(self.bytes_per_second))) if len(self.data) else 0
+
+  def get_current_audio_start_time(self):
+    try:
+      return self.data[self.data_iter][0]
+    except IndexError:
+      return -1
+
+  def pause(self):
+    self.paused = True
+
+  def unpause(self):
+    self.paused = False
+
+  def stop(self):
+    self.paused = False
+    self.recording = False
+    self.play_start = None
+    if self.inp is not None:
+      self.inp.close()
+      self.inp = None
