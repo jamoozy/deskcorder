@@ -21,6 +21,7 @@ class Canvas(gtk.DrawingArea):
     self.raster = None
     self.raster_cr = None
     self.color = (0.0, 0.0, 0.0)
+    self.ttpt = -1
 
     # Keeps track of whether the state of the canvas is reflected in a file
     # somewhere or not.  If not, this is dirty.
@@ -57,6 +58,7 @@ class Canvas(gtk.DrawingArea):
     self.connect("motion-notify-event", self.gtk_motion)
     self.connect("button-press-event", self.gtk_button_press)
     self.connect("button-release-event", self.gtk_button_release)
+
     self.set_size_request(800,600)
 
   def get_time_of_first_event(self):
@@ -68,6 +70,32 @@ class Canvas(gtk.DrawingArea):
   def unfreeze(self):
     self.frozen = False
 
+  def draw_last_slide(self):
+    for stroke in self.trace.last():
+      self.draw(stroke.color, stroke[0].p, stroke[0].pos)
+      if len(stroke) > 1:
+        self.draw(stroke.color, stroke[1].p, stroke[0].pos, stroke[1].pos)
+      for i in xrange(len(stroke)-2):
+        self.draw(stroke.color, stroke[i+2].p,
+          stroke[i].pos, stroke[i+1].pos, stroke[i+2].pos)
+
+  def draw_to_ttpt(self):
+    stroke = None
+    for i in xrange(len(self.trace)):
+      if self.trace[i].t < self.ttpt and self.ttpt < self.trace[i+1]:
+        stroke = self.trace[i]
+        break
+
+    for stroke in self.trace[i]:
+      if len(stroke) > 1:
+        if stroke[1].t < self.ttpt:
+          self.draw(stroke.color, stroke[0].p, stroke[0].pos, stroke[1].pos)
+        for i in xrange(len(stroke)-2):
+          if stroke[i].t < self.ttpt:
+            self.draw(stroke.color, stroke[i].p, stroke[i].pos, stroke[i+1].pos, stroke[i+2].pos)
+          else:
+            return
+
   def gtk_configure(self, widget, event):
     self.size = self.window.get_size()
     self.raster = self.window.cairo_create().get_target().create_similar(cairo.CONTENT_COLOR, self.size[0], self.size[1])
@@ -75,14 +103,10 @@ class Canvas(gtk.DrawingArea):
     self.raster_cr.set_source_rgba(1.0, 1.0, 1.0, 1.0)
     self.raster_cr.rectangle(0.0, 0.0, self.size[0], self.size[1])
     self.raster_cr.fill()
-    for stroke in self.trace.last():
-      self.draw(stroke.color, stroke[0].p, stroke[0].pos)
-      if len(stroke) > 1:
-        self.draw(stroke.color, stroke[1].p,
-          stroke[0].pos, stroke[1].pos)
-      for i in xrange(len(stroke)-2):
-        self.draw(stroke.color, stroke[i+2].p,
-          stroke[i].pos, stroke[i+1].pos, stroke[i+2].pos)
+    if self.ttpt >= 0:
+      self.draw_to_ttpt()
+    else:
+      self.draw_last_slide()
     self.refresh()
 
   def get_pressure_or_default(self, device, default = None):
@@ -205,9 +229,9 @@ class Canvas(gtk.DrawingArea):
     self.window.invalidate_region(reg, False)
 
 class GUI:
-  def __init__(self, gladefile):
+  def __init__(self):
     # Set up most of the window (from glade file).
-    self.glade_tree = gtk.glade.XML(gladefile)
+    self.glade_tree = gtk.glade.XML('layout.glade')
     self.root = self.glade_tree.get_widget("mainwindow")
     self.root.connect("destroy", lambda x: sys.exit(0))
 
@@ -227,9 +251,6 @@ class GUI:
     self.stop_button = self.glade_tree.get_widget("stop")
     self.progress_bar = self.glade_tree.get_widget("progress-bar")
     self.pback_await = self.glade_tree.get_widget("playback/await")
-
-#    self.play_button.connect("toggled", self.update_pbar)
-    self.pbar_timer_id = None
 
     # pen widths
     self.glade_tree.get_widget("thin").connect("toggled",
@@ -287,41 +308,21 @@ class GUI:
 
     self.canvas.set_extension_events(gtk.gdk.EXTENSION_EVENTS_ALL)
 
-  def pbar_should_update(self):
-    return self.pbar_timer_id is not None
-
-  def update_pbar(self, w):
-    if w.get_active():
-      if self.pbar_timer_id is None:
-        self.pbar_timer_id = gobject.timeout_add(1000, self.pbar_queue_redraw)
-        print 'setting pbar_timer_id = %d' % self.pbar_timer_id
-    else:
-      if self.pbar_timer_id is not None:
-        gobject.timeout_remove(self.pbar_timer_id)
-        self.pbar_timer_id = None
-        print 'stopped pbar_timer_id'
-
-  def pbar_queue_redraw(self):
-    if self.pbar_timer_id is not None:
-      print 'queue'
-      self.progress_bar.send_expose()
-      return True
-    return False
-
   def quit(self, event):
-    if not self.canvas.dirty or self.dirty_ok():
+    if not self.canvas.dirty or self.dirty_quit_ok():
       gtk.main_quit()
 
 
   # -------- Load/Save dialogues.
 
   def open(self):
-    if self.canvas.dirty and not self.dirty_ok(): return
+    if self.canvas.dirty and not self.dirty_open_ok(): return
     fcd = gtk.FileChooserDialog('Choose a file to save', None,
         gtk.FILE_CHOOSER_ACTION_OPEN, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
           gtk.STOCK_OPEN, gtk.RESPONSE_ACCEPT))
     fcd.set_do_overwrite_confirmation(True)
     fcd.set_current_folder('saves')
+    self.add_filters(fcd)
     if fcd.run() == gtk.RESPONSE_ACCEPT:
       self.last_fname = fcd.get_filename()
       self.open_fun(fcd.get_filename())
@@ -330,8 +331,9 @@ class GUI:
   def save(self):
     if self.last_fname:
       self.save_fun(self.last_fname)
+      return True
     else:
-      self.save_as()
+      return self.save_as()
 
   def save_as(self):
     fcd = gtk.FileChooserDialog('Choose a file to save', None,
@@ -340,18 +342,62 @@ class GUI:
     fcd.set_do_overwrite_confirmation(True)
     fcd.set_current_folder('saves')
     fcd.set_current_name('save.dcb')
+    self.add_filters(fcd)
     if fcd.run() == gtk.RESPONSE_ACCEPT:
       self.last_fname = fcd.get_filename()
       self.save_fun(fcd.get_filename())
+      fcd.destroy()
+      return True
     fcd.destroy()
+    return False
 
-  def dirty_ok(self):
+
+  # ---------- Dialogs ------------------------------
+
+  @staticmethod
+  def add_filters(fcd):
+    filters = [("DC binary", "*.dcb"),
+               ("DC XML", "*.dcx"),
+               ("DC text", "*.dct"),
+               ("All DC Files", "*.dc[bxt]"),
+               ("All files", "*.*")]
+    for t in filters:
+      f = gtk.FileFilter()
+      f.set_name(t[0])
+      f.add_pattern(t[1])
+      fcd.add_filter(f)
+
+  def dirty_quit_ok(self):
+    return self.dirty_ok("Quit", 'quitting')
+
+  def dirty_open_ok(self):
+    return self.dirty_ok("Open", "opening another file")
+
+  def dirty_new_ok(self):
+    return self.dirty_ok("Continue", 'starting a new page')
+
+  def dirty_ok(self, but, verb):
     '''Checks if it's okay that the canvas has unsaved changes on it.'''
-    d = gtk.MessageDialog(None, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_YES_NO,
-        "You have unsaved changes.  Are you sure you want to continue?")
-    ok = (d.run() == gtk.RESPONSE_YES)
+    d = gtk.MessageDialog(None, 0, gtk.MESSAGE_WARNING, gtk.BUTTONS_NONE,
+        'You have unsaved changes!  Would you like to save before %s?' % verb)
+    d.add_buttons("Save", 0, "Cancel", 1, '%s without saving' % but, 2)
+    d.set_default_response(1)
+    rtn = d.run()
     d.destroy()
-    return ok
+    if rtn == 0:
+      if not self.save():
+        return self.dirty_ok(but, verb)
+      else:
+        return True
+    elif rtn == 1:
+      return False
+    elif rtn == 2:
+      return True
+    else:
+      print 'Unknown button: %d' % rtn
+      return False
+
+  
 
 
   # -------- Callbacks ---------------------
@@ -413,7 +459,7 @@ class GUI:
       print 'returning value'
       return self.progress_bar.get_value()
     else:
-      self.progress_bar.set_value(val)
+      self.progress_bar.set_value(100. * val)
       self.progress_bar.queue_draw()
 
   def timeout_add(self, delay, fun):
@@ -431,4 +477,3 @@ class GUI:
   def deinit(self):
     self.root.hide()
     self.root.destroy()
-

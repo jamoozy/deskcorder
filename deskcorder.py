@@ -232,15 +232,14 @@ class Point(object):
 ############################################################################
 
 class Deskcorder:
-  def __init__(self, layout, gui_enabled=True, audio_enabled=True):
+  def __init__(self, gui_enabled=True, audio_enabled=True):
     # Playback variables.
     self.play_time = None
     self.break_times = []
     self.last_pause = None
-    self.progress = -1
 
     self.audio = Audio()
-    self.gui = GUI(layout)
+    self.gui = GUI()
 
     self.gui.connect_new(self.reset)
     self.gui.connect_play(self.play)
@@ -253,6 +252,8 @@ class Deskcorder:
 
     if not audio_enabled: print 'Audio disabled'
     if not gui_enabled: print 'GUI disabled'
+
+    self.progress = -1
 
   def get_duration(self):
     start_t = self.earliest_event_time()
@@ -275,10 +276,11 @@ class Deskcorder:
   def reset(self):
     '''Clears the state of the canvas and audio, as if the system had just
     started.'''
-    if not self.gui.canvas.dirty or self.gui.dirty_ok():
+    if not self.gui.canvas.dirty or self.gui.dirty_new_ok():
       print 'resetting'
       self.gui.canvas.reset()
       self.audio.reset()
+      self.stop()
     else:
       print 'not resetting'
 
@@ -289,7 +291,7 @@ class Deskcorder:
       try:
         self.load(fname)
       except IOError as e:
-        print 'Error: %s"' % e.message
+        print 'Could not load file, %s: %s"' % (fname, e.message)
 
     try:
       self.gui.run()
@@ -380,7 +382,7 @@ class Deskcorder:
 
     self.gui.progress_slider_value(self.progress / self.get_duration())
     ttpt = self.progress + self.earliest_event_time()
-    print 'progress: %.1fs' % self.progress
+    self.gui.canvas.ttpt = ttpt
 
     # I'm simulating a do-while loop here.  This one is basically:
     #  1. While we still have stuff to iterate over, iterate.
@@ -574,11 +576,6 @@ def parse_args(args):
   return fname, audio, video
 
 if __name__ == '__main__':
-  # Lists of GUI modules with their layouts.
-  V_MODULE_FILES = {'qtgui': 'layout.ui',
-                   'gtkgui': 'layout.glade',
-                    'dummy': None}
-
   # valid video modules in preferred order
   VALID_V_MODULES = ['gtkgui', 'qtgui', 'dummy']
 
@@ -622,7 +619,4 @@ if __name__ == '__main__':
         pass
 
   print 'using %s audio and %s gui' % (audio, video)
-  if video in VALID_V_MODULES:
-    Deskcorder(V_MODULE_FILES[video]).run(fname)
-  else:
-    Deskcorder(None).run(fname)
+  Deskcorder().run(fname)
