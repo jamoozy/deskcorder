@@ -111,10 +111,10 @@ Deskcorder XML (*.dcx);;\
 Deskcorder Text (*.dct);;\
 All Deskcorder Files (*.dcb *.dcx *.dct);;\
 All Files (*.*)'''
-  def __init__(self, layout):
+  def __init__(self):
     self.app = QApplication(sys.argv);
     self.app.quitOnLastWindowClosed = False
-    self.root = PyQt4.uic.loadUi(layout)
+    self.root = PyQt4.uic.loadUi('layout.ui')
     self.canvas = Canvas()
     self.root.gv.setScene(self.canvas)
 
@@ -140,7 +140,7 @@ All Files (*.*)'''
     self.app.connect(self.root.pause_button, SIGNAL('clicked()'), self.root.action_pause, SLOT('trigger()'))
     self.app.connect(self.root.stop_button, SIGNAL('clicked()'), self.root.action_stop, SLOT('trigger()'))
 
-    self.root.action_quit.connect(self.root.action_quit, SIGNAL('triggered()'), self.quit)
+    self.app.connect(self.root.action_quit, SIGNAL('triggered()'), self.quit)
     #self.app.connect(self.app, SIGNAL('lastWindowClosed()'), self.quit)
     #self.app.connect(self.app, SIGNAL('lastWindowClosed()'), self.root, SLOT('show()'))
 
@@ -248,6 +248,9 @@ All Files (*.*)'''
 
   def connect_open(self, fun):
     self.open_fun = fun
+
+  def connect_progress_fmt(self, fun):
+    pass
 
   def record_pressed(self, state = None):
     pass
