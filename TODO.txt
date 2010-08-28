@@ -1,0 +1,20 @@
+A list of things to do:
+
+1) Core functionality:
+  - Make dummy.GUI() and dummy.Audio() correct
+    * add all functions
+    * write in "oops" prints
+
+2) Linux GUI:
+  - use gtk.Builder instead of gtk.glade.XML
+    * implement accelerators (menu quick keys)
+  - create export dialog for custom positions (as opposed to slides)
+
+3) Mac GUI:
+  - Build me ... probably with Cocoa
+
+4) Windows GUI
+  - Build me ... not sure what with.
+
+5) Qt GUI
+  - Finish me ... useful?
