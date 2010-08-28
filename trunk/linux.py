@@ -2,7 +2,6 @@
 import pygtk
 pygtk.require('2.0')
 import gtk
-import gtk.glade
 import gobject
 import cairo
 
@@ -237,86 +236,100 @@ class Canvas(gtk.DrawingArea):
             int(abs(pos2[1] - pos3[1]) + r)))
     self.window.invalidate_region(reg, False)
 
+class ExportDialog(gtk.Dialog):
+  def __init__(self):
+    gtk.Dialog.__init__(self)
+
+  def run(self):
+    return 0
+
 class GUI:
   def __init__(self):
-    # Set up most of the window (from glade file).
-    self.glade_tree = gtk.glade.XML('layout.glade')
-    self.root = self.glade_tree.get_widget("mainwindow")
+    # Set up most of the window (from XML file).
+    if True:
+      self.builder = gtk.Builder()
+      self.builder.add_from_file('layout.gtk')
+      self.get_fun = self.builder.get_object
+    else:
+      self.glade_tree = gtk.glade.XML('layout.glade')
+      self.get_fun = self.glade_tree.get_widget
+
+    self.root = self.get_fun("root")
     self.root.connect("destroy", lambda x: sys.exit(0))
 
     # Add the canvas, too.
     self.canvas = Canvas()
     self.canvas.show()
-    self.glade_tree.get_widget("vbox1").add(self.canvas)
-    self.glade_tree.get_widget("clear").connect("clicked",
+    self.get_fun("vbox1").add(self.canvas)
+    self.get_fun("clear").connect("clicked",
         lambda x: self.canvas.clear())
 
     self.last_fname = None
 
     # playback
-    self.record_button = self.glade_tree.get_widget("record")
-    self.play_button = self.glade_tree.get_widget("play")
-    self.pause_button = self.glade_tree.get_widget("pause")
-    self.stop_button = self.glade_tree.get_widget("stop")
-    self.progress_bar = self.glade_tree.get_widget("progress-bar")
-    self.pback_await = self.glade_tree.get_widget("playback/await")
+    self.record_button = self.get_fun("record")
+    self.play_button = self.get_fun("play")
+    self.pause_button = self.get_fun("pause")
+    self.stop_button = self.get_fun("stop")
+    self.progress_bar = self.get_fun("progress-bar")
+    self.pback_await = self.get_fun("playback/await")
 
     # import/export
-    self.glade_tree.get_widget('file/exp-png').connect("activate",
+    self.get_fun('file/exp-png').connect("activate",
         lambda x: self.exp_png())
-    self.glade_tree.get_widget('file/exp-pdf').connect("activate",
+    self.get_fun('file/exp-pdf').connect("activate",
         lambda x: self.exp_pdf())
 
     # pen widths
-    self.glade_tree.get_widget("thin").connect("toggled",
+    self.get_fun("thin").connect("toggled",
         lambda x: x.get_active() and self.canvas.setRadius(1.5))
-    self.glade_tree.get_widget("medium").connect("toggled",
+    self.get_fun("medium").connect("toggled",
         lambda x: x.get_active() and self.canvas.setRadius(3.0))
-    self.glade_tree.get_widget("thick").connect("toggled",
+    self.get_fun("thick").connect("toggled",
         lambda x: x.get_active() and self.canvas.setRadius(6.0))
 
     # colors
-    self.glade_tree.get_widget("black").connect("toggled",
+    self.get_fun("black").connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(0.0, 0.0, 0.0))
-    self.glade_tree.get_widget("blue").connect("toggled",
+    self.get_fun("blue").connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(0.0, 0.0, 1.0))
-    self.glade_tree.get_widget("red").connect("toggled",
+    self.get_fun("red").connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(1.0, 0.0, 0.0))
-    self.glade_tree.get_widget("green").connect("toggled",
+    self.get_fun("green").connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(0.0, 1.0, 0.0))
-    self.glade_tree.get_widget("gray").connect("toggled",
+    self.get_fun("gray").connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(0.5, 0.5, 0.5))
-    self.glade_tree.get_widget("cyan").connect("toggled",
+    self.get_fun("cyan").connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(0.0, 1.0, 1.0))
-    self.glade_tree.get_widget("lime").connect("toggled",
+    self.get_fun("lime").connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(0.3, 1.0, 0.5))
-    self.glade_tree.get_widget("magenta").connect("toggled",
+    self.get_fun("magenta").connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(1.0, 0.0, 1.0))
-    self.glade_tree.get_widget("orange").connect("toggled",
+    self.get_fun("orange").connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(1.0, 0.5, 0.0))
-    self.glade_tree.get_widget("yellow").connect("toggled",
+    self.get_fun("yellow").connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(1.0, 1.0, 0.0))
-    self.glade_tree.get_widget("white").connect("toggled",
+    self.get_fun("white").connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(1.0, 1.0, 1.0))
 
     self.root.connect("delete-event", lambda x,y: gtk.main_quit())
 
-    self.glade_tree.get_widget("edit/add").connect("activate",
+    self.get_fun("edit/add").connect("activate",
         lambda x: self.canvas.clear())
-    self.glade_tree.get_widget("add").connect("clicked",
+    self.get_fun("add").connect("clicked",
         lambda x: self.canvas.clear())
-    self.glade_tree.get_widget("file/open").connect("activate",
+    self.get_fun("file/open").connect("activate",
         lambda x: self.open())
-    self.glade_tree.get_widget("open").connect("clicked",
+    self.get_fun("open").connect("clicked",
         lambda x: self.open())
-    self.glade_tree.get_widget("file/save").connect("activate",
+    self.get_fun("file/save").connect("activate",
         lambda x: self.save())
-    self.glade_tree.get_widget("save").connect("clicked",
+    self.get_fun("save").connect("clicked",
         lambda x: self.save())
-    self.glade_tree.get_widget("file/save-as").connect("activate",
+    self.get_fun("file/save-as").connect("activate",
         lambda x: self.save_as())
-    self.glade_tree.get_widget("file/quit").connect("activate", self.quit)
-    self.glade_tree.get_widget("quit").connect("clicked", self.quit)
+    self.get_fun("file/quit").connect("activate", self.quit)
+    self.get_fun("quit").connect("clicked", self.quit)
 
     self.save_fun = None
     self.open_fun = None
@@ -330,6 +343,12 @@ class GUI:
     if not self.canvas.dirty or self.dirty_quit_ok():
       gtk.main_quit()
 
+  def set_fname(self, fname):
+    if fname.rindex('/') >= 0:
+      self.last_fname = fname[fname.rindex('/')+1:]
+    else:
+      self.last_fname = fname
+
 
   # -------- Import/Export dialogues.
   
@@ -338,10 +357,44 @@ class GUI:
       self.int_err('Export to PNG functionality disabled.')
       return
 
+    fcd = gtk.FileChooserDialog('Choose a file to epxort to', None,
+        gtk.FILE_CHOOSER_ACTION_SAVE, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+          gtk.STOCK_SAVE, gtk.RESPONSE_ACCEPT))
+    fcd.set_do_overwrite_confirmation(True)
+    fcd.set_current_folder('saves')
+    if self.last_fname is not None:
+      fcd.set_current_name(self.last_fname[:-4] + '.png')
+    else:
+      fcd.set_current_name('save.png')
+    self.add_filters(fcd)
+    if fcd.run() == gtk.RESPONSE_ACCEPT:
+      self.exp_png_fun(fcd.get_filename(), (800,600), None)
+      fcd.destroy()
+      return True
+    fcd.destroy()
+    return False
+
   def exp_pdf(self):
     if self.exp_pdf_fun is None:
       self.int_err('Export to PDF functionality disabled.')
       return
+
+    fcd = gtk.FileChooserDialog('Choose a file to epxort to', None,
+        gtk.FILE_CHOOSER_ACTION_SAVE, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+          gtk.STOCK_SAVE, gtk.RESPONSE_ACCEPT))
+    fcd.set_do_overwrite_confirmation(True)
+    fcd.set_current_folder('saves')
+    if self.last_fname is not None:
+      fcd.set_current_name(self.last_fname[:-4] + '.pdf')
+    else:
+      fcd.set_current_name('save.pdf')
+    self.add_filters(fcd)
+    if fcd.run() == gtk.RESPONSE_ACCEPT:
+      self.exp_pdf_fun(fcd.get_filename(), (800,600), None)
+      fcd.destroy()
+      return True
+    fcd.destroy()
+    return False
 
   def imp_pdf(self):
     if self.exp_pdf_fun is None:
@@ -408,6 +461,8 @@ class GUI:
                ("DC XML", "*.dcx"),
                ("DC text", "*.dct"),
                ("All DC Files", "*.dc[bxt]"),
+               ('PDF files', '*.pdf'),
+               ('PNG files', '*.png'),
                ("All files", "*.*")]
     for t in filters:
       f = gtk.FileFilter()
@@ -455,20 +510,27 @@ class GUI:
   # -------- Callbacks ---------------------
 
   def connect_new(self, fun):
-    self.glade_tree.get_widget("file/new").connect("activate", lambda x: fun())
-    self.glade_tree.get_widget("new").connect("clicked", lambda x: fun())
+    self.get_fun("file/new").connect("activate", lambda x: fun())
+    self.get_fun("new").connect("clicked", lambda x: fun())
 
   def connect_record(self, fun):
     self.record_button.connect("toggled", lambda w: fun(w.get_active()))
+    self.get_fun("playback/record").connect("activate", lambda w:
+        fun(self.record_button.get_active()))
 
   def connect_play(self, fun):
     self.play_button.connect("toggled", lambda w: fun(w.get_active()))
+    self.get_fun("playback/play").connect("activate", lambda w:
+        fun(self.play_button.get_active()))
 
   def connect_pause(self, fun):
     self.pause_button.connect("toggled", lambda w: fun(w.get_active()))
+    self.get_fun("playback/pause").connect("activate", lambda w:
+        fun(self.pause_button.get_active()))
 
   def connect_stop(self, fun):
     self.stop_button.connect("clicked", lambda w: fun())
+    self.get_fun("playback/stop").connect("activate", lambda w: fun())
 
   def connect_exp_png(self, fun):
     self.exp_png_fun = fun
@@ -486,7 +548,7 @@ class GUI:
     self.progress_bar.connect("format-value", lambda s,v: fun(v))
 
   def connect_progress_moved(self, fun):
-    self.progress_bar.connect("change-value", lambda w, t, v: fun(max(min(v / 100., 1.), .0)))
+    self.progress_bar.connect("change-value", lambda w, t, v: fun(max(min(v, 1.), .0)))
 
 
   # ---- buttons -------------------------
@@ -520,7 +582,7 @@ class GUI:
       print 'returning value'
       return self.progress_bar.get_value()
     else:
-      self.progress_bar.set_value(100. * val)
+      self.progress_bar.set_value(val)
       self.progress_bar.queue_draw()
 
   def timeout_add(self, delay, fun):

@@ -6,7 +6,9 @@ import time
 import thread
 import os
 import signal
+
 import recorder
+import exporter
 
 
 ############################################################################
@@ -312,12 +314,9 @@ class Deskcorder:
     '''Clears the state of the canvas and audio, as if the system had just
     started.'''
     if not self.gui.canvas.dirty or self.gui.dirty_new_ok():
-      print 'resetting'
       self.gui.canvas.reset()
       self.audio.reset()
       self.stop()
-    else:
-      print 'not resetting'
 
   def run(self, fname = None):
     '''Runs the program.'''
@@ -353,22 +352,17 @@ class Deskcorder:
 
   def play(self, active):
     '''Start/stop playing what's in this file.'''
-    print 'play(%s)' % str(active)
     if not active:
       if self.is_paused():
-        print 'paused'
         self.gui.play_pressed(True)
         self.gui.pause_pressed(False)
       else:
-        print 'stopping'
         self.stop()
       return
     elif self.is_playing():
-      print 'forget it'
       return
 
     if self.is_recording():
-      print 'end REC'
       self.stop()
       self.gui.play_pressed(True)
 
@@ -516,7 +510,6 @@ class Deskcorder:
     return True
 
   def stop(self):
-    print 'STOP'
     if self.is_paused():
       self.pause(time.time())
     self.audio.stop()
@@ -547,11 +540,17 @@ class Deskcorder:
   # ------------------------------ File I/O -------------------------------- #
   ############################################################################
 
-  def exp_png(self, fname):
-    print 'not exporting to %s.png' % fname
+  def exp_png(self, fname, size, times):
+    if fname.lower().endswith('.png'):
+      exporter.to_png(self.gui.canvas.trace, fname[:-4], size, times)
+    else:
+      exporter.to_png(self.gui.canvas.trace, fname, size, times)
 
-  def exp_pdf(self, fname):
-    print 'not exporting to %s.pdf' % fname
+  def exp_pdf(self, fname, size, times):
+    if fname.lower().endswith('.pdf'):
+      exporter.to_pdf(self.gui.canvas.trace, fname[:-4], size, times)
+    else:
+      exporter.to_pdf(self.gui.canvas.trace, fname, size, times)
 
   def save(self, fname = 'save.dcb'):
     if self.is_recording():
@@ -582,6 +581,7 @@ class Deskcorder:
       self.load_dct(fname)
     else:
       self.load_dcb(fname)
+    self.gui.set_fname(fname)
 
   def load_dcb(self, fname = 'save.dcb'):
     self.gui.canvas.trace, a = recorder.load_dcb(fname)
