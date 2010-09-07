@@ -55,7 +55,13 @@ class Canvas(gtk.DrawingArea):
     # tuple, and (w,h) window size tuple.
     self.positions = []
 
-    self.set_events(gtk.gdk.POINTER_MOTION_MASK  | gtk.gdk.BUTTON_MOTION_MASK | gtk.gdk.BUTTON1_MOTION_MASK | gtk.gdk.BUTTON2_MOTION_MASK | gtk.gdk.BUTTON3_MOTION_MASK | gtk.gdk.BUTTON_PRESS_MASK | gtk.gdk.BUTTON_RELEASE_MASK)
+    self.set_events(gtk.gdk.POINTER_MOTION_MASK |
+                    gtk.gdk.BUTTON_MOTION_MASK |
+                    gtk.gdk.BUTTON1_MOTION_MASK |
+                    gtk.gdk.BUTTON2_MOTION_MASK |
+                    gtk.gdk.BUTTON3_MOTION_MASK |
+                    gtk.gdk.BUTTON_PRESS_MASK |
+                    gtk.gdk.BUTTON_RELEASE_MASK)
 
     self.connect("configure-event", lambda w, e: self.draw_all())
     self.connect("expose-event", lambda w, e: self.gtk_expose())
@@ -85,7 +91,7 @@ class Canvas(gtk.DrawingArea):
 
   def draw_to_ttpt(self):
     stroke = None
-    for i in xrange(len(self.trace)):
+    for i in xrange(len(self.trace)-1):
       if self.trace[i].t < self.ttpt and self.ttpt < self.trace[i+1]:
         stroke = self.trace[i]
         break
@@ -246,90 +252,69 @@ class ExportDialog(gtk.Dialog):
 class GUI:
   def __init__(self):
     # Set up most of the window (from XML file).
-    if True:
-      self.builder = gtk.Builder()
-      self.builder.add_from_file('layout.gtk')
-      self.get_fun = self.builder.get_object
-    else:
-      self.glade_tree = gtk.glade.XML('layout.glade')
-      self.get_fun = self.glade_tree.get_widget
+    #GUI.load_accel_map()
 
-    self.root = self.get_fun("root")
+    self.builder = gtk.Builder()
+    self.builder.add_from_file('layout.gtk')
+
+    self.root = self["root"]
     self.root.connect("destroy", lambda x: sys.exit(0))
 
     # Add the canvas, too.
     self.canvas = Canvas()
     self.canvas.show()
-    self.get_fun("vbox1").add(self.canvas)
-    self.get_fun("clear").connect("clicked",
-        lambda x: self.canvas.clear())
+    self["vbox1"].add(self.canvas)
+    self["clear"].connect("clicked", lambda x: self.canvas.clear())
 
     self.last_fname = None
 
-    # playback
-    self.record_button = self.get_fun("record")
-    self.play_button = self.get_fun("play")
-    self.pause_button = self.get_fun("pause")
-    self.stop_button = self.get_fun("stop")
-    self.progress_bar = self.get_fun("progress-bar")
-    self.pback_await = self.get_fun("playback/await")
-
     # import/export
-    self.get_fun('file/exp-png').connect("activate",
-        lambda x: self.exp_png())
-    self.get_fun('file/exp-pdf').connect("activate",
-        lambda x: self.exp_pdf())
+    self['file/exp-png'].connect("activate", lambda x: self.exp_png())
+    self['file/exp-pdf'].connect("activate", lambda x: self.exp_pdf())
 
     # pen widths
-    self.get_fun("thin").connect("toggled",
+    self["thin"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setRadius(1.5))
-    self.get_fun("medium").connect("toggled",
+    self["medium"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setRadius(3.0))
-    self.get_fun("thick").connect("toggled",
+    self["thick"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setRadius(6.0))
 
     # colors
-    self.get_fun("black").connect("toggled",
+    self["black"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(0.0, 0.0, 0.0))
-    self.get_fun("blue").connect("toggled",
+    self["blue"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(0.0, 0.0, 1.0))
-    self.get_fun("red").connect("toggled",
+    self["red"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(1.0, 0.0, 0.0))
-    self.get_fun("green").connect("toggled",
+    self["green"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(0.0, 1.0, 0.0))
-    self.get_fun("gray").connect("toggled",
+    self["gray"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(0.5, 0.5, 0.5))
-    self.get_fun("cyan").connect("toggled",
+    self["cyan"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(0.0, 1.0, 1.0))
-    self.get_fun("lime").connect("toggled",
+    self["lime"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(0.3, 1.0, 0.5))
-    self.get_fun("magenta").connect("toggled",
+    self["magenta"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(1.0, 0.0, 1.0))
-    self.get_fun("orange").connect("toggled",
+    self["orange"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(1.0, 0.5, 0.0))
-    self.get_fun("yellow").connect("toggled",
+    self["yellow"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(1.0, 1.0, 0.0))
-    self.get_fun("white").connect("toggled",
+    self["white"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(1.0, 1.0, 1.0))
 
     self.root.connect("delete-event", lambda x,y: gtk.main_quit())
 
-    self.get_fun("edit/add").connect("activate",
-        lambda x: self.canvas.clear())
-    self.get_fun("add").connect("clicked",
-        lambda x: self.canvas.clear())
-    self.get_fun("file/open").connect("activate",
-        lambda x: self.open())
-    self.get_fun("open").connect("clicked",
-        lambda x: self.open())
-    self.get_fun("file/save").connect("activate",
-        lambda x: self.save())
-    self.get_fun("save").connect("clicked",
-        lambda x: self.save())
-    self.get_fun("file/save-as").connect("activate",
-        lambda x: self.save_as())
-    self.get_fun("file/quit").connect("activate", self.quit)
-    self.get_fun("quit").connect("clicked", self.quit)
+    self["edit/add"].connect("activate", lambda x: self.canvas.clear())
+    self["add"].connect("clicked", lambda x: self.canvas.clear())
+    self["file/open"].connect("activate", lambda x: self.open())
+    self["open"].connect("clicked", lambda x: self.open())
+    self["file/save"].connect("activate", lambda x: self.save())
+    self["save"].connect("clicked", lambda x: self.save())
+    self["file/save-as"].connect("activate", lambda x: self.save_as())
+    self["file/quit"].connect("activate", self.quit)
+    self["quit"].connect("clicked", self.quit)
 
     self.save_fun = None
     self.open_fun = None
@@ -338,6 +323,9 @@ class GUI:
     self.imp_pdf_fun = None
 
     self.canvas.set_extension_events(gtk.gdk.EXTENSION_EVENTS_ALL)
+
+  def __getitem__(self, key):
+    return self.builder.get_object(key)
 
   def quit(self, event):
     if not self.canvas.dirty or self.dirty_quit_ok():
@@ -351,11 +339,29 @@ class GUI:
 
 
   # -------- Import/Export dialogues.
-  
+
+#  def frame_selector(self):
+#    b = gtk.Builder()
+#    b.load_from_file('exp-dialog.gtk')
+#    model = b.builder.get_object('treeview').get_model()
+#
+#    tstamps = map(lambda x: x.t - .1, self.canvas.trace.slides[1:]) + [self.canvas.trace.last().last().last().t + .1]
+#    for ts in tstamps:
+#      it = b.builder.get_object('list').append((gobject.TYPE_UINT64, gobject.TYPE_STRING))
+#      b.builder.get_object('list').append(it, 0, ts, 
+#
+#    b.builder.get_object('root').show()
+#    b.builder.get_object('root').destroy()
+#
+#    for b
+#    return tstamps
+
   def exp_png(self):
     if self.exp_png_fun is None:
       self.int_err('Export to PNG functionality disabled.')
-      return
+      returnk
+    #frames = self.frame_selector()
+    frames = []
 
     fcd = gtk.FileChooserDialog('Choose a file to epxort to', None,
         gtk.FILE_CHOOSER_ACTION_SAVE, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
@@ -510,27 +516,27 @@ class GUI:
   # -------- Callbacks ---------------------
 
   def connect_new(self, fun):
-    self.get_fun("file/new").connect("activate", lambda x: fun())
-    self.get_fun("new").connect("clicked", lambda x: fun())
+    self["file/new"].connect("activate", lambda x: fun())
+    self["new"].connect("clicked", lambda x: fun())
 
   def connect_record(self, fun):
-    self.record_button.connect("toggled", lambda w: fun(w.get_active()))
-    self.get_fun("playback/record").connect("activate", lambda w:
+    self['record'].connect("toggled", lambda w: fun(w.get_active()))
+    self["playback/record"].connect("activate", lambda w:
         fun(self.record_button.get_active()))
 
   def connect_play(self, fun):
-    self.play_button.connect("toggled", lambda w: fun(w.get_active()))
-    self.get_fun("playback/play").connect("activate", lambda w:
+    self['play'].connect("toggled", lambda w: fun(w.get_active()))
+    self["playback/play"].connect("activate", lambda w:
         fun(self.play_button.get_active()))
 
   def connect_pause(self, fun):
-    self.pause_button.connect("toggled", lambda w: fun(w.get_active()))
-    self.get_fun("playback/pause").connect("activate", lambda w:
-        fun(self.pause_button.get_active()))
+    self['pause'].connect("toggled", lambda w: fun(w.get_active()))
+    self["playback/pause"].connect("activate", lambda w:
+        fun(self['pause'].get_active()))
 
   def connect_stop(self, fun):
-    self.stop_button.connect("clicked", lambda w: fun())
-    self.get_fun("playback/stop").connect("activate", lambda w: fun())
+    self['stop'].connect("clicked", lambda w: fun())
+    self["playback/stop"].connect("activate", lambda w: fun())
 
   def connect_exp_png(self, fun):
     self.exp_png_fun = fun
@@ -545,10 +551,10 @@ class GUI:
     self.open_fun = fun
 
   def connect_progress_fmt(self, fun):
-    self.progress_bar.connect("format-value", lambda s,v: fun(v))
+    self['progress-bar'].connect("format-value", lambda s,v: fun(v))
 
   def connect_progress_moved(self, fun):
-    self.progress_bar.connect("change-value", lambda w, t, v: fun(max(min(v, 1.), .0)))
+    self['progress-bar'].connect("change-value", lambda s,t,v: fun(max(min(v, 1.), .0)))
 
 
   # ---- buttons -------------------------
@@ -567,9 +573,9 @@ class GUI:
 
   def pause_pressed(self, state = None):
     if state is None:
-      return self.pause_button.get_active()
+      return self['pause'].get_active()
     else:
-      self.pause_button.set_active(state)
+      self['pause'].set_active(state)
 
   def audio_wait_pressed(self, state = None):
     if state is None:
@@ -580,10 +586,10 @@ class GUI:
   def progress_slider_value(self, val = None):
     if val is None:
       print 'returning value'
-      return self.progress_bar.get_value()
+      return self['progress-bar'].get_value()
     else:
-      self.progress_bar.set_value(val)
-      self.progress_bar.queue_draw()
+      self['progress-bar'].set_value(val)
+      self['progress-bar'].queue_draw()
 
   def timeout_add(self, delay, fun):
     gobject.timeout_add(delay, fun)
@@ -592,14 +598,14 @@ class GUI:
   # ---- Up and down ---------------------
 
   def init(self):
-    self.root.show()
+    self['root'].show()
 
   def run(self):
     gtk.main()
 
   def deinit(self):
-    self.root.hide()
-    self.root.destroy()
+    self['root'].hide()
+    self['root'].destroy()
 
 
 

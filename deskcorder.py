@@ -110,6 +110,14 @@ class Trace(object):
     l = self.get_last_event()
     return l.t if l is not None else -1
 
+  def percentage_to_tstring(self, pct):
+    dur = self.get_duration()
+    if dur == 0:
+      return "0:00"
+    else:
+      amt = int(dur * pct)
+      return "%d:%02d" % (amt / 60, amt % 60)
+
   def get_duration(self):
     '''Computes the duration in s of the trace.'''
     return self.get_time_of_last_event() - self.get_time_of_first_event()
@@ -396,9 +404,12 @@ class Deskcorder:
     if self.is_paused(): return True
     if self.get_duration() <= 0: return False
 
+    # "normal" update
     self.prev_now = self.curr_now
     self.curr_now = time.time()
     self.progress += self.curr_now - self.prev_now
+
+    # adjustment for audio lag
     if self.audio.is_playing():
       a_start = self.audio.get_current_audio_start_time()
       a_time = self.audio.get_s_played()
@@ -408,10 +419,14 @@ class Deskcorder:
           a_time = .01
         if a_time > 0:
           self.progress = a_start + a_time - self.earliest_event_time()
+    else:
+      a_time = -1
 
+    # updating GUI
     self.gui.progress_slider_value(self.progress / self.get_duration())
     ttpt = self.progress + self.earliest_event_time()
     self.gui.canvas.ttpt = ttpt
+    print 'prog:%.1fs' % self.progress
 
     # I'm simulating a do-while loop here.  This one is basically:
     #  1. While we still have stuff to iterate over, iterate.
@@ -530,6 +545,7 @@ class Deskcorder:
       return '0:00 / %s' % (total)
 
   def move_progress(self, val):
+    print 'progress moved to %.0f%%' % (val * 100)
     self.gui.play_pressed(True)
     self.gui.pause_pressed(True)
     self.set_progress(val * self.get_duration())

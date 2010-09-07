@@ -2,12 +2,12 @@
 <glade-interface>
   <!-- interface-requires gtk+ 2.16 -->
   <!-- interface-naming-policy project-wide -->
-  <widget class="GtkWindow" id="mainwindow">
+  <widget class="GtkWindow" id="root">
     <child>
       <widget class="GtkVBox" id="vbox1">
         <property name="visible">True</property>
         <child>
-          <widget class="GtkMenuBar" id="menubar1">
+          <widget class="GtkMenuBar" id="menubar">
             <property name="visible">True</property>
             <child>
               <widget class="GtkMenuItem" id="file">
@@ -224,7 +224,7 @@
           </packing>
         </child>
         <child>
-          <widget class="GtkToolbar" id="toolbar1">
+          <widget class="GtkToolbar" id="toolbar">
             <property name="visible">True</property>
             <property name="toolbar_style">icons</property>
             <property name="icon_size_set">True</property>
@@ -378,7 +378,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="thin">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">thin stroke</property>
+                <property name="label" translatable="yes">SML</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/smallstroke.png</property>
               </widget>
@@ -390,7 +390,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="medium">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">mid stroke</property>
+                <property name="label" translatable="yes">MED</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/midstroke.png</property>
                 <property name="active">True</property>
@@ -404,7 +404,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="thick">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">thick stroke</property>
+                <property name="label" translatable="yes">LRG</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/bigstroke.png</property>
                 <property name="group">thin</property>
@@ -426,7 +426,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="black">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">black</property>
+                <property name="label" translatable="yes">BLK</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/cicon-black.png</property>
                 <property name="active">True</property>
@@ -439,7 +439,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="blue">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">blue</property>
+                <property name="label" translatable="yes">BLU</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/cicon-blue.png</property>
                 <property name="group">black</property>
@@ -452,7 +452,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="red">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">red</property>
+                <property name="label" translatable="yes">RED</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/cicon-red.png</property>
                 <property name="group">black</property>
@@ -465,7 +465,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="green">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">green</property>
+                <property name="label" translatable="yes">GRN</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/cicon-green.png</property>
                 <property name="group">black</property>
@@ -478,7 +478,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="gray">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">gray</property>
+                <property name="label" translatable="yes">GRY</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/cicon-gray.png</property>
                 <property name="group">black</property>
@@ -491,7 +491,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="cyan">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">cyan</property>
+                <property name="label" translatable="yes">CYN</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/cicon-cyan.png</property>
                 <property name="group">black</property>
@@ -504,7 +504,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="lime">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">lime</property>
+                <property name="label" translatable="yes">LIM</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/cicon-lime.png</property>
                 <property name="group">black</property>
@@ -517,7 +517,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="magenta">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">magenta</property>
+                <property name="label" translatable="yes">MAG</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/cicon-magenta.png</property>
                 <property name="group">black</property>
@@ -530,7 +530,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="orange">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">orange</property>
+                <property name="label" translatable="yes">ORG</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/cicon-orange.png</property>
                 <property name="group">black</property>
@@ -543,7 +543,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="yellow">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">yellow</property>
+                <property name="label" translatable="yes">YEL</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/cicon-yellow.png</property>
                 <property name="group">black</property>
@@ -556,7 +556,7 @@
             <child>
               <widget class="GtkRadioToolButton" id="white">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">white</property>
+                <property name="label" translatable="yes">WHT</property>
                 <property name="use_underline">True</property>
                 <property name="icon">icons/cicon-white.png</property>
                 <property name="group">black</property>
