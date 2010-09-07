@@ -52,10 +52,14 @@ class Canvas(QGraphicsScene):
     if size != self.last_size:
       for item in self.items():
         self.removeItem(item)
-      for stroke in self.trace:
-        for i in xrange(len(stroke[1:])):
-          # Set pen
-          self.addLine((stroke[i-1][0]) * size[0], (stroke[i-1][1]) * size[1], (stroke[i][0]) * size[0], (stroke[i][1]) * size[1])
+      for stroke in self.trace.get_strokes():
+        pen = QPen()
+        pen.setColor(QColor(stroke.r(), stroke.g(), stroke.b()))
+        for i in xrange(len(stroke.points[1:])):
+          # XXX still need to set pen
+          p0 = (stroke[i-1].x() * size[0] - size[0] / 2, stroke[i-1].y() * size[1] - size[1] / 2)
+          p1 = (stroke[i].x() * size[0] - size[0] / 2,  stroke[i].y() * size[1] - size[1] / 2)
+          self.addLine(p0[0], p0[1], p1[0], p1[1], pen)
     self.last_size = size
 
   # ---------------- Drawing -----------------------------
@@ -252,7 +256,16 @@ All Files (*.*)'''
   def connect_progress_fmt(self, fun):
     pass
 
+  def connect_progress_moved(self, fun):
+    pass
+
   def record_pressed(self, state = None):
+    pass
+
+  def connect_exp_png(self, fun):
+    pass
+
+  def connect_exp_pdf(self, fun):
     pass
 
   def play_pressed(self, state = None):
@@ -260,6 +273,9 @@ All Files (*.*)'''
 
   def pause_pressed(self, state = None):
     pass
+
+  def set_fname(self, fname):
+    self.last_save = fname
 
   def timeout_add(self, delay, fun):
     self.timers.append(QTimer())
