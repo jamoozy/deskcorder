@@ -3,6 +3,7 @@
   <requires lib="gtk+" version="2.16"/>
   <!-- interface-naming-policy project-wide -->
   <object class="GtkWindow" id="root">
+    <property name="title" translatable="yes">Deskcorder</property>
     <child>
       <object class="GtkVBox" id="vbox1">
         <property name="visible">True</property>
@@ -19,30 +20,42 @@
                     <property name="visible">True</property>
                     <child>
                       <object class="GtkImageMenuItem" id="file/new">
-                        <property name="label">gtk-media-next</property>
+                        <property name="label">gtk-new</property>
                         <property name="visible">True</property>
+                        <property name="accel_path">&lt;Deskcorder&gt;/File/New</property>
+                        <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="n" signal="activate" modifiers="GDK_CONTROL_MASK"/>
                       </object>
                     </child>
                     <child>
                       <object class="GtkImageMenuItem" id="file/open">
                         <property name="label">gtk-open</property>
                         <property name="visible">True</property>
+                        <property name="accel_path">&lt;Deskcorder&gt;/File/Open</property>
+                        <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="s" signal="activate" modifiers="GDK_CONTROL_MASK"/>
                       </object>
                     </child>
                     <child>
                       <object class="GtkImageMenuItem" id="file/save">
                         <property name="label">gtk-save</property>
                         <property name="visible">True</property>
+                        <property name="accel_path">&lt;Deskcorder&gt;/File/Save</property>
+                        <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="s" signal="activate" modifiers="GDK_CONTROL_MASK"/>
                       </object>
                     </child>
                     <child>
                       <object class="GtkImageMenuItem" id="file/save-as">
                         <property name="label">gtk-save-as</property>
                         <property name="visible">True</property>
+                        <property name="accel_path">&lt;Deskcorder&gt;/File/Save As</property>
+                        <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="s" signal="activate" modifiers="GDK_SHIFT_MASK|GDK_CONTROL_MASK"/>
                       </object>
                     </child>
                     <child>
@@ -54,16 +67,20 @@
                       <object class="GtkImageMenuItem" id="file/exp-pdf">
                         <property name="label" translatable="yes">Export to PDF...</property>
                         <property name="visible">True</property>
+                        <property name="accel_path">&lt;Deskcorder&gt;/File/Export to PDF...</property>
                         <property name="image">image1</property>
                         <property name="use_stock">False</property>
+                        <accelerator key="e" signal="activate" modifiers="GDK_CONTROL_MASK"/>
                       </object>
                     </child>
                     <child>
                       <object class="GtkImageMenuItem" id="file/exp-png">
                         <property name="label" translatable="yes">Export to PNG...</property>
                         <property name="visible">True</property>
+                        <property name="accel_path">&lt;Deskcorder&gt;/File/Export to PNG...</property>
                         <property name="image">image2</property>
                         <property name="use_stock">False</property>
+                        <accelerator key="e" signal="activate" modifiers="GDK_SHIFT_MASK|GDK_CONTROL_MASK"/>
                       </object>
                     </child>
                     <child>
@@ -75,8 +92,10 @@
                       <object class="GtkImageMenuItem" id="file/quit">
                         <property name="label">gtk-quit</property>
                         <property name="visible">True</property>
+                        <property name="accel_path">&lt;Deskcorder&gt;/File/Quit</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="q" signal="activate" modifiers="GDK_CONTROL_MASK"/>
                       </object>
                     </child>
                   </object>
@@ -97,6 +116,7 @@
                         <property name="visible">True</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="a" signal="activate" modifiers="GDK_CONTROL_MASK"/>
                       </object>
                     </child>
                     <child>
@@ -110,6 +130,7 @@
                         <property name="visible">True</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="x" signal="activate" modifiers="GDK_CONTROL_MASK"/>
                       </object>
                     </child>
                     <child>
@@ -118,6 +139,7 @@
                         <property name="visible">True</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="c" signal="activate" modifiers="GDK_CONTROL_MASK"/>
                       </object>
                     </child>
                     <child>
@@ -126,6 +148,7 @@
                         <property name="visible">True</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="v" signal="activate" modifiers="GDK_CONTROL_MASK"/>
                       </object>
                     </child>
                     <child>
@@ -134,6 +157,29 @@
                         <property name="visible">True</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkSeparatorMenuItem" id="edit/sep2">
+                        <property name="visible">True</property>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkImageMenuItem" id="edit/undo">
+                        <property name="label">gtk-undo</property>
+                        <property name="visible">True</property>
+                        <property name="use_underline">True</property>
+                        <property name="use_stock">True</property>
+                        <accelerator key="z" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+                      </object>
+                    </child>
+                    <child>
+                      <object class="GtkImageMenuItem" id="edit/redo">
+                        <property name="label">gtk-redo</property>
+                        <property name="visible">True</property>
+                        <property name="use_underline">True</property>
+                        <property name="use_stock">True</property>
+                        <accelerator key="y" signal="activate" modifiers="GDK_CONTROL_MASK"/>
                       </object>
                     </child>
                   </object>
@@ -146,38 +192,46 @@
                 <property name="label" translatable="yes">_Playback</property>
                 <property name="use_underline">True</property>
                 <child type="submenu">
-                  <object class="GtkMenu" id="menu1">
+                  <object class="GtkMenu" id="playback-menu">
                     <property name="visible">True</property>
                     <child>
                       <object class="GtkImageMenuItem" id="playback/record">
                         <property name="label">gtk-media-record</property>
                         <property name="visible">True</property>
+                        <property name="accel_path">&lt;Deskcorder&gt;/Playback/Record</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="F5" signal="activate"/>
                       </object>
                     </child>
                     <child>
                       <object class="GtkImageMenuItem" id="playback/play">
                         <property name="label">gtk-media-play</property>
                         <property name="visible">True</property>
+                        <property name="accel_path">&lt;Deskcorder&gt;/Playback/Play</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="F6" signal="activate"/>
                       </object>
                     </child>
                     <child>
                       <object class="GtkImageMenuItem" id="playback/pause">
                         <property name="label">gtk-media-pause</property>
                         <property name="visible">True</property>
+                        <property name="accel_path">&lt;Deskcorder&gt;/Playback/Pause</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="F6" signal="activate"/>
                       </object>
                     </child>
                     <child>
                       <object class="GtkImageMenuItem" id="playback/stop">
                         <property name="label">gtk-media-stop</property>
                         <property name="visible">True</property>
+                        <property name="accel_path">&lt;Deskcorder&gt;/Playback/Stop</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="F7" signal="activate"/>
                       </object>
                     </child>
                     <child>
@@ -188,9 +242,12 @@
                     <child>
                       <object class="GtkCheckMenuItem" id="playback/await">
                         <property name="visible">True</property>
-                        <property name="label" translatable="yes">Wait for _Audio ...</property>
+                        <property name="related_action">await-action</property>
+                        <property name="accel_path">&lt;Deskcorder&gt;/Playback/Wait for Audio...</property>
+                        <property name="label" translatable="yes">Wait for _Audio...</property>
                         <property name="use_underline">True</property>
                         <property name="active">True</property>
+                        <accelerator key="F8" signal="activate"/>
                       </object>
                     </child>
                   </object>
@@ -211,6 +268,7 @@
                         <property name="visible">True</property>
                         <property name="use_underline">True</property>
                         <property name="use_stock">True</property>
+                        <accelerator key="F1" signal="activate"/>
                       </object>
                     </child>
                   </object>
@@ -378,7 +436,6 @@
             <child>
               <object class="GtkRadioToolButton" id="thin">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">thin stroke</property>
                 <property name="use_underline">True</property>
                 <property name="icon_widget">img/small</property>
               </object>
@@ -390,7 +447,6 @@
             <child>
               <object class="GtkRadioToolButton" id="medium">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">mid stroke</property>
                 <property name="use_underline">True</property>
                 <property name="icon_widget">img/medium</property>
                 <property name="active">True</property>
@@ -404,7 +460,6 @@
             <child>
               <object class="GtkRadioToolButton" id="thick">
                 <property name="visible">True</property>
-                <property name="label" translatable="yes">thick stroke</property>
                 <property name="use_underline">True</property>
                 <property name="icon_widget">img/large</property>
                 <property name="group">thin</property>
@@ -578,7 +633,7 @@
             <property name="can_focus">True</property>
             <property name="events">GDK_STRUCTURE_MASK | GDK_SCROLL_MASK</property>
             <property name="extension_events">cursor</property>
-            <property name="adjustment">adjustment1</property>
+            <property name="adjustment">pbar-align</property>
             <property name="show_fill_level">True</property>
             <property name="digits">2</property>
             <property name="value_pos">right</property>
@@ -659,10 +714,14 @@
     <property name="visible">True</property>
     <property name="pixbuf">icons/cicon-white.png</property>
   </object>
-  <object class="GtkAdjustment" id="adjustment1">
-    <property name="upper">1</property>
+  <object class="GtkAdjustment" id="pbar-align">
+    <property name="upper">1.1000000000000001</property>
     <property name="step_increment">0.01</property>
     <property name="page_increment">0.10000000000000001</property>
     <property name="page_size">0.10000000000000001</property>
+  </object>
+  <object class="GtkToggleAction" id="await-action">
+    <property name="label">Wait for Audio</property>
+    <property name="short_label">A-wait</property>
   </object>
 </interface>
