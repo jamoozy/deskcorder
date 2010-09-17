@@ -71,7 +71,7 @@ def load_wav(fname):
   return data
 
 def load(fname, win_sz = (1,1)):
-  '''Reads in a file and returns a tuple-rific trace, positions, audio'''
+  '''Reads in a file and returns a 2-tuple of lecture an audio.'''
   if fname.lower().endswith(".dcx"):
     return load_dcx(fname, win_sz)
   elif fname.lower().endswith(".dct"):
@@ -80,25 +80,25 @@ def load(fname, win_sz = (1,1)):
     return load_dcb(fname, win_sz)
 
 def save(fname, trace = None, audiofiles = [], req_v = DC_REC_VERSION):
-  '''Writes out a file and returns a tuple-rific trace, positions, audio'''
+  '''Writes out a lecture and set of audio snippets to a file.'''
   if trace is None: return
   if fname.lower().endswith(".dcx"):
-    return save_dcx(fname, trace, audiofiles, req_v)
+    save_dcx(fname, trace, audiofiles, req_v)
   elif fname.lower().endswith(".dct"):
-    return save_dct(fname, trace, audiofiles, req_v)
+    save_dct(fname, trace, audiofiles, req_v)
   else:
-    return save_dcb(fname, trace, audiofiles, req_v)
+    save_dcb(fname, trace, audiofiles, req_v)
 
-def save_dcb(fname = 'save.dcb', trace = None, audiofiles = [], req_v = DC_REC_VERSION):
+def save_dcb(fname = 'save.dcb', lecture = None, audiofiles = [], req_v = DC_REC_VERSION):
   '''Writes DCB-v0.1.1'''
-  if trace is None: return
+  if lecture is None: return
   f = open(fname, 'wb')
   f_log = open(fname + ".save_log", 'w')
   f.write(DCB_MAGIC_NUMBER)
   f.write(struct.pack("<III", 0, 1, 1))  # file version
-  f.write(struct.pack("<I", len(trace)))
-  f_log.write('File will have %d slides\n' % len(trace.slides))
-  for slide in trace.slides:
+  f.write(struct.pack("<I", len(lecture)))
+  f_log.write('File will have %d slides\n' % len(lecture.slides))
+  for slide in lecture.slides:
     f.write(struct.pack("<QI", int(slide.t * 1000), len(slide))) # tstamp & number of strokes
     f_log.write('  slide: %d strokes at %.0fms' % (len(slide), slide.t))
     f_log.flush()
@@ -122,10 +122,10 @@ def save_dcb(fname = 'save.dcb', trace = None, audiofiles = [], req_v = DC_REC_V
           f_log.write('    point (%.3f,%.3f) @ %.1f with %.2f%%\n' % (point.x(), point.y(), point.t, thickness * 100))
           f_log.flush()
 
-  f.write(struct.pack("<I", len(trace.moves)))  # number of moves sans mouse click
-  f_log.write('%d positions\n' % len(trace.moves))
+  f.write(struct.pack("<I", len(lecture.moves)))  # number of moves sans mouse click
+  f_log.write('%d positions\n' % len(lecture.moves))
   f_log.flush()
-  for m in trace.moves:
+  for m in lecture.moves:
     # point tstamp (ms), x, y
     f.write(struct.pack("<Qff", m.t * 1000, m.x(), m.y()))
     f_log.write('  pos: (%.3f,%.3f) @ %fms\n' % (m.x(), m.y(), m.t))
@@ -157,7 +157,7 @@ def load_dcb(fname = 'save.dcb', win_sz = (1,1)):
   f_log.write('version %d.%d.%d\n' % v)
   if v[0] == 0:
     if v[1] == 1:
-      trace = dc.Trace()
+      lec = dc.Lecture()
       audiofiles = []
       f_log.write("We're at f.tell():%d\n" % f.tell())
       num_slides = bin_read(f, "<I")[0]  # number of slides
@@ -169,7 +169,7 @@ def load_dcb(fname = 'save.dcb', win_sz = (1,1)):
         t, num_strokes = bin_read(f, "<QI")
         f_log.write('  slide %d: %d strokes at %.1fs\n' % (slide_i, num_strokes, t / 1000.))
         f_log.flush()
-        trace.append(t / 1000.)
+        lec.append(t / 1000.)
         for stroke_i in xrange(num_strokes):
           # number of points in this stroke, color (r,g,b)
           f_log.write("    We're at f.tell():%d\n" % f.tell())
@@ -178,16 +178,16 @@ def load_dcb(fname = 'save.dcb', win_sz = (1,1)):
             color = bin_read(f, "<fff")
             f_log.write('    stroke %d: %d points with (%.1f,%.1f,%.1f)\n' % ((stroke_i, num_points) + color))
             f_log.flush()
-            trace.last().append(color)
+            lec.last().append(color)
             for point_i in xrange(num_points):
               # timestamp (ms), x, y, "thickness"
               ts, x, y, th = bin_read(f, "<Qfff")
               f_log.write('      point %d: (%.3f,%.3f) @ %.1fs with %.1f%%\n' % (point_i, x, y, ts / 1000., th * 100))
               f_log.flush()
               if v[2] == 1:
-                trace[-1][-1].append((x, y), ts / 1000.0, th)
+                lec[-1][-1].append((x, y), ts / 1000.0, th)
               elif v[2] == 2:
-                trace[-1][-1].append((x, y), ts / 1000.0, th * math.sqrt(2))
+                lec[-1][-1].append((x, y), ts / 1000.0, th * math.sqrt(2))
           else:
             f_log.write('    Empty stroke!\n')
 
@@ -202,7 +202,7 @@ def load_dcb(fname = 'save.dcb', win_sz = (1,1)):
         t, x, y = bin_read(f, "<Qff")
         f_log.write('  pos %d: (%.3f,%.3f) @ %.1fs\n' % (pos_i, x, y, t / 1000.))
         f_log.flush()
-        trace.add_move((x, y), t / 1000.)
+        lec.add_move((x, y), t / 1000.)
 
       # number of audio files
       f_log.write("We're at f.tell():%d\n" % f.tell())
@@ -219,16 +219,16 @@ def load_dcb(fname = 'save.dcb', win_sz = (1,1)):
         audiofiles.append([t / 1000, zlib.decompress(f.read(sz))])
   f.close()
   f_log.close()
-  return trace, audiofiles
+  return lec, audiofiles
 
-def save_dcx(fname = 'save.dcx', trace = [], audiofiles = [], req_v = DC_REC_VERSION):
+def save_dcx(fname = 'save.dcx', lecture = [], audiofiles = [], req_v = DC_REC_VERSION):
   '''Saves DCX-v0.1.1
-  @trace: A complex list.  See the Canvas object for details.
+  @lecture: A complex list.  See the Canvas object for details.
   @audiofiles: A list of (t,data) tuples'''
   f = open(fname, 'w')
   f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
   f.write('<document version="0.1.1">\n')
-  for slide in trace:
+  for slide in lecture:
     if type(slide) == float:
       f.write('  <slide cleartime="%lf">\n' % slide)
     else:
@@ -693,11 +693,11 @@ if __name__ == '__main__':
        (1003.3, (.1, .2), (1,1)),
        (1003.4, (.1, .0), (1,1))]
   a = []
-  trace = dc.Trace()
-  trace.load_trace_data(t)
-  trace.load_position_data(p)
+  lec = dc.Lecture()
+  lec.load_trace_data(t)
+  lec.load_position_data(p)
 
-  save('test.dcb', trace, a)
+  save('test.dcb', lec, a)
   tb,ab = load('test.dcb')
 
   if t != tb.make_trace_data() or p != tb.make_position_data() or a != ab:

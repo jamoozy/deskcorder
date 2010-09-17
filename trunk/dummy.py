@@ -7,99 +7,92 @@ This is a module that serves 2 functions:
 
 class Audio:
   def __init__(self):
-    pass
+    print 'Audio::__init__() not implemented'
   def make_data(self):
+    print 'Audio::make_data() not implmented'
     return []
   def load_data(self, data):
-    pass
+    print 'Audio::make_data(data) not implmented'
   def reset(self):
-    pass
+    print 'Audio::reset() not implmented'
   def is_recording(self):
+    print 'Audio::is_recording() not implmented'
     return False
   def record(self, t = None):
-    pass
+    print 'Audio::record(time=None) not implmented'
   def record_tick(self):
+    print 'Audio::record(time=None) not implmented'
     return False
   def play(self):
-    pass
+    print 'Audio::play() not implmented'
   def play_init(self):
-    pass
+    print 'Audio::play_init() not implmented'
   def play_tick(self, ttpt = None):
+    print 'Audio::play_tick(time_to_play_til=None) not implmented'
     return False
   def is_playing(self):
+    print 'Audio::is_playing() not implmented'
     return False
   def get_s_played(self):
+    print 'Audio::get_s_played() not implmented'
     return -1
   def get_time_of_first_event(self):
+    print 'Audio::get_time_of_first_event() not implmented'
     return -1
   def get_current_audio_start_time(self):
+    print 'Audio::get_current_audio_start_time() not implmented'
     return -1
   def pause(self):
-    pass
+    print 'Audio::pause() not implmented'
   def unpause(self):
-    pass
+    print 'Audio::unpause() not implmented'
   def stop(self):
-    pass
+    print 'Audio::stop() not implmented'
   def reset(self):
-    pass
-
-class Canvas:
-  def __init__(self):
-    pass
-  def get_time_of_first_event(self):
-    return -1
-  def freeze(self):
-    pass
-  def unfreeze(self):
-    pass
-  def clear(self):
-    pass
-  def refresh(self):
-    pass
-  def reset(self):
-    pass
-  def draw(self, color, r, pos1, pos2=None, pos3=None):
-    pass
+    print 'Audio::reset() not implmented'
 
 class GUI:
-  def __init__(self, gladefile):
-    pass
+  def __init__(self):
+    print 'GUI::__init__() not implemented'
+  def __getitem__(self, key):
+    print 'GUI["%s"] not found!' % key
+    return None
   def quit(self, event):
-    pass
+    print 'GUI::quit(event) not implemented'
   def open(self):
-    pass
+    print 'GUI::open() not implemented'
   def save(self):
-    pass
+    print 'GUI::save() not implemented'
   def save_as(self):
-    pass
+    print 'GUI::save_as() not implemented'
   def dirty_ok(self):
+    print 'GUI::dirty_ok() not implemented'
     return False
   def connect_new(self, fun):
-    pass
+    print 'GUI::connect_new(function) not implemented'
   def connect_record(self, fun):
-    pass
+    print 'GUI::connect_record(function) not implemented'
   def connect_play(self, fun):
-    pass
+    print 'GUI::connect_play(function) not implemented'
   def connect_pause(self, fun):
-    pass
+    print 'GUI::connect_pause(function) not implemented'
   def connect_stop(self, fun):
-    pass
+    print 'GUI::connect_stop(function) not implemented'
   def connect_save(self, fun):
-    pass
+    print 'GUI::connect_save(function) not implemented'
   def connect_open(self, fun):
-    pass
+    print 'GUI::connect_open(function) not implemented'
   def record_pressed(self, state = None):
-    pass
+    print 'GUI::record_pressed(state) not implemented'
   def play_pressed(self, state = None):
-    pass
+    print 'GUI::play_pressed(state) not implemented'
   def pause_pressed(self, state = None):
-    pass
+    print 'GUI::pause_pressed(state) not implemented'
   def timeout_add(self, delay, fun):
-    pass
+    print 'GUI::timeout_add(delay, function) not implemented'
   def init(self):
-    pass
+    print 'GUI::init() not implemented'
   def run(self):
-    pass
+    print 'GUI::run() not implemented'
   def deinit(self):
-    pass
-
+    print 'GUI::deinit() not implemented'

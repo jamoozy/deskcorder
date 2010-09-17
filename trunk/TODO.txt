@@ -6,8 +6,6 @@ A list of things to do:
     * write in "oops" prints
 
 2) Linux GUI:
-  - use gtk.Builder instead of gtk.glade.XML
-    * implement accelerators (menu quick keys)
   - create export dialog for custom positions (as opposed to slides)
 
 3) Mac GUI:
