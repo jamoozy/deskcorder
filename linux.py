@@ -36,24 +36,7 @@ class Canvas(gtk.DrawingArea):
     # Audio.
     self.frozen = False
 
-    # This is a very loaded list of lists.  At the topmost level, this is a
-    # list of floats and lists.  It should start with a float and end in a
-    # list.  The floats are "clear times" (including the starting and ending
-    # times) and the lists represent slides between the clears.
-    #
-    # Each slide is a list of "curves" (more commonly known as "strokes").
-    #
-    # Each curve is a list of points.
-    #
-    # Each point is a tuple containing a time stamp, (x,y) position tuple,
-    # radius, (r,g,b) color tuple, and (w,h) window size tuple.
-    self.trace = dc.Trace(time.time())
-
-    # Not nearly as complex as trace.
-    #
-    # This is a list of points.  Each point is a tuple of time, (x,y) position
-    # tuple, and (w,h) window size tuple.
-    self.positions = []
+    self.lecture = dc.Lecture(time.time())
 
     self.set_events(gtk.gdk.POINTER_MOTION_MASK |
                     gtk.gdk.BUTTON_MOTION_MASK |
@@ -72,7 +55,7 @@ class Canvas(gtk.DrawingArea):
     self.set_size_request(800,600)
 
   def get_time_of_first_event(self):
-    self.trace.get_time_of_first_event()
+    self.lecture.get_time_of_first_event()
 
   def freeze(self):
     self.frozen = True
@@ -81,7 +64,7 @@ class Canvas(gtk.DrawingArea):
     self.frozen = False
 
   def draw_last_slide(self):
-    for stroke in self.trace.last():
+    for stroke in self.lecture.last():
       self.draw(stroke.color, stroke[0].p, stroke[0].pos)
       if len(stroke) > 1:
         self.draw(stroke.color, stroke[1].p, stroke[0].pos, stroke[1].pos)
@@ -91,12 +74,12 @@ class Canvas(gtk.DrawingArea):
 
   def draw_to_ttpt(self):
     stroke = None
-    for i in xrange(len(self.trace)-1):
-      if self.trace[i].t < self.ttpt and self.ttpt < self.trace[i+1]:
-        stroke = self.trace[i]
+    for i in xrange(len(self.lecture)-1):
+      if self.lecture[i].t < self.ttpt and self.ttpt < self.lecture[i+1]:
+        stroke = self.lecture[i]
         break
 
-    for stroke in self.trace[i]:
+    for stroke in self.lecture[i]:
       if len(stroke) > 1:
         if stroke[1].t < self.ttpt:
           self.draw(stroke.color, stroke[0].p, stroke[0].pos, stroke[1].pos)
@@ -120,15 +103,15 @@ class Canvas(gtk.DrawingArea):
     self.refresh()
 
   def get_pressure_or_default(self, device, default = None):
-    trace = device.get_state(self.window)
-    p = device.get_axis(trace[0], gtk.gdk.AXIS_PRESSURE)
+    lecture = device.get_state(self.window)
+    p = device.get_axis(lecture[0], gtk.gdk.AXIS_PRESSURE)
     return default if default is not None and p is None else p
 
   def gtk_button_press(self, widget, event):
     if not self.frozen:
       self.dirty = True
       self.drawing = True
-      self.trace.last().append(self.color)
+      self.lecture.last().append(self.color)
 
   def gtk_motion(self, widget, event):
     if not self.frozen:
@@ -138,15 +121,15 @@ class Canvas(gtk.DrawingArea):
         self.dirty = True
         p = self.get_pressure_or_default(event.device, .5)
         r = (p * 2 + 0.2) * self.radius / math.sqrt(self.size[0]**2 + self.size[1]**2)
-        if len(self.trace.last().last()) > 1:
-          self.draw(self.color, r, self.trace[-1][-1][-2].pos, self.trace[-1][-1][-1].pos, pos)
-        elif len(self.trace.last().last()) > 0:
-          self.draw(self.color, r, self.trace[-1][-1][-1].pos, pos)
+        if len(self.lecture.last().last()) > 1:
+          self.draw(self.color, r, self.lecture[-1][-1][-2].pos, self.lecture[-1][-1][-1].pos, pos)
+        elif len(self.lecture.last().last()) > 0:
+          self.draw(self.color, r, self.lecture[-1][-1][-1].pos, pos)
         else:
           self.draw(self.color, r, pos)
-        self.trace.last().last().append(pos, time.time(), r)
+        self.lecture.last().last().append(pos, time.time(), r)
       else:
-        self.trace.add_move(pos, time.time())
+        self.lecture.add_move(pos, time.time())
 
   def gtk_button_release(self, widget, event):
     if not self.frozen:
@@ -178,7 +161,7 @@ class Canvas(gtk.DrawingArea):
     self.raster_cr.fill()
     self.refresh()
     if not self.frozen:
-      self.trace.append(time.time())
+      self.lecture.append(time.time())
 
   def refresh(self):
     reg = gtk.gdk.Region()
@@ -187,7 +170,7 @@ class Canvas(gtk.DrawingArea):
 
   def reset(self):
     self.clear()
-    self.trace = dc.Trace(time.time())
+    self.lecture = dc.Lecture(time.time())
     self.positions = []
     self.dirty = False
     self.frozen = False
@@ -345,7 +328,7 @@ class GUI:
 #    b.load_from_file('exp-dialog.gtk')
 #    model = b.builder.get_object('treeview').get_model()
 #
-#    tstamps = map(lambda x: x.t - .1, self.canvas.trace.slides[1:]) + [self.canvas.trace.last().last().last().t + .1]
+#    tstamps = map(lambda x: x.t - .1, self.canvas.lecture.slides[1:]) + [self.canvas.lecture.last().last().last().t + .1]
 #    for ts in tstamps:
 #      it = b.builder.get_object('list').append((gobject.TYPE_UINT64, gobject.TYPE_STRING))
 #      b.builder.get_object('list').append(it, 0, ts, 
@@ -522,12 +505,12 @@ class GUI:
   def connect_record(self, fun):
     self['record'].connect("toggled", lambda w: fun(w.get_active()))
     self["playback/record"].connect("activate", lambda w:
-        fun(self.record_button.get_active()))
+        fun(self['record'].get_active()))
 
   def connect_play(self, fun):
     self['play'].connect("toggled", lambda w: fun(w.get_active()))
     self["playback/play"].connect("activate", lambda w:
-        fun(self.play_button.get_active()))
+        fun(self['play'].get_active()))
 
   def connect_pause(self, fun):
     self['pause'].connect("toggled", lambda w: fun(w.get_active()))
@@ -561,15 +544,15 @@ class GUI:
 
   def record_pressed(self, state = None):
     if state is None:
-      return self.record_button.get_active()
+      return self['record'].get_active()
     else:
-      self.record_button.set_active(state)
+      self['record'].set_active(state)
 
   def play_pressed(self, state = None):
     if state is None:
-      return self.play_button.get_active()
+      return self['play'].get_active()
     else:
-      self.play_button.set_active(state)
+      self['play'].set_active(state)
 
   def pause_pressed(self, state = None):
     if state is None:
@@ -579,9 +562,9 @@ class GUI:
 
   def audio_wait_pressed(self, state = None):
     if state is None:
-      return self.pback_await.get_active()
+      return self['playback/await'].get_active()
     else:
-      self.pback_await.set_active(state)
+      self['playback/await'].set_active(state)
 
   def progress_slider_value(self, val = None):
     if val is None:
