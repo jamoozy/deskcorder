@@ -315,9 +315,10 @@ class GUI:
       gtk.main_quit()
 
   def set_fname(self, fname):
-    if fname.rindex('/') >= 0:
+    print 'called with "%s"' % fname
+    try:
       self.last_fname = fname[fname.rindex('/')+1:]
-    else:
+    except ValueError:
       self.last_fname = fname
 
 
@@ -501,6 +502,7 @@ class GUI:
   def connect_new(self, fun):
     self["file/new"].connect("activate", lambda x: fun())
     self["new"].connect("clicked", lambda x: fun())
+    self.last_fname = None
 
   def connect_record(self, fun):
     self['record'].connect("toggled", lambda w: fun(w.get_active()))
