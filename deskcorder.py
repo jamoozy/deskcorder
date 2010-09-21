@@ -643,15 +643,13 @@ def parse_args(args):
       has_gui = False
     elif arg == '-A' or arg == '--no-audio':
       audio = 'dummy'
-    elif arg.startswith('--open='):
-      fname = arg[7:]
     elif arg.startswith('--use-gui='):
       video = arg[10:]
     elif arg.startswith('--use-audio='):
       audio = arg[12:]
       pass
     else:
-      print 'Unrecognized command: "%s"' % sys.argv[1]
+      fname = arg
   return fname, audio, video
 
 if __name__ == '__main__':
