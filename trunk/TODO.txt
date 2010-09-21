@@ -1,5 +1,11 @@
 A list of things to do:
 
+0) BUGS:
+  - Here's a weird one when used with linux.py:
+    * Load a file at the start (on the CL)
+    * Record without mic plugged in for a brief period.
+    * Hit play and watch the weirdness ...
+
 1) Core functionality:
   - Make dummy.GUI() and dummy.Audio() correct
     * add all functions
@@ -8,11 +14,10 @@ A list of things to do:
 2) Linux GUI:
   - create export dialog for custom positions (as opposed to slides)
 
-3) Mac GUI:
+3) Cross-platformnes
   - Build me ... probably with Cocoa
-
-4) Windows GUI
   - Build me ... not sure what with.
-
-5) Qt GUI
   - Finish me ... useful?
+
+4) Undo/Redo:
+  - Make some buttons ... probably just pop off the last stroke ...
