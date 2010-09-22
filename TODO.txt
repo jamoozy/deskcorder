@@ -11,7 +11,7 @@ A list of things to do:
     * add all functions
     * write in "oops" prints
 
-2) Linux GUI:
+2) Export Dialog (GNU/Linux version)
   - create export dialog for custom positions (as opposed to slides)
 
 3) Cross-platformnes
@@ -21,3 +21,15 @@ A list of things to do:
 
 4) Undo/Redo:
   - Make some buttons ... probably just pop off the last stroke ...
+
+5) "go back" feature?
+  - I was thinking something that allows you to go back a
+    slide to add something you just remembered.
+    * This would necessitate altering the timestamps
+      sequentially, updating them to "fit" the new stuff in.
+    * Find some intuitive way to find the exact place that
+      you want the remembered data to be put (assume end?).
+
+6) Progress bar display updates in status (Audio callback?)
+
+7) Mouse cursor change to dot on draw.
