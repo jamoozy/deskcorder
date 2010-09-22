@@ -16,7 +16,7 @@ import sys
 import deskcorder as dc
 
 class Canvas(gtk.DrawingArea):
-  def __init__(self):
+  def __init__(self, lecture):
     gtk.DrawingArea.__init__(self)
 
     self.radius = 3.0
@@ -36,7 +36,7 @@ class Canvas(gtk.DrawingArea):
     # Audio.
     self.frozen = False
 
-    self.lecture = dc.Lecture(time.time())
+    self.lecture = lecture
 
     self.set_events(gtk.gdk.POINTER_MOTION_MASK |
                     gtk.gdk.BUTTON_MOTION_MASK |
@@ -233,7 +233,7 @@ class ExportDialog(gtk.Dialog):
     return 0
 
 class GUI:
-  def __init__(self):
+  def __init__(self, lecture):
     # Set up most of the window (from XML file).
     #GUI.load_accel_map()
 
@@ -244,7 +244,7 @@ class GUI:
     self.root.connect("destroy", lambda x: sys.exit(0))
 
     # Add the canvas, too.
-    self.canvas = Canvas()
+    self.canvas = Canvas(lecture)
     self.canvas.show()
     self["vbox1"].add(self.canvas)
     self["clear"].connect("clicked", lambda x: self.canvas.clear())
@@ -571,10 +571,17 @@ class GUI:
   def progress_slider_value(self, val = None):
     if val is None:
       print 'returning value'
-      return self['progress-bar'].get_value()
+      return self['pbar-align'].get_value()
     else:
-      self['progress-bar'].set_value(val)
+      print 'setting value to "%2.1f%%"' % (100 * val)
+      self['pbar-align'].set_value(min(max(0., val), 1.))
       self['progress-bar'].queue_draw()
+
+  def disable_progress_bar(self):
+    self['progress-bar'].set_sensitive(False)
+
+  def enable_progress_bar(self):
+    self['progress-bar'].set_sensitive(True)
 
   def timeout_add(self, delay, fun):
     gobject.timeout_add(delay, fun)
@@ -787,3 +794,6 @@ class Audio:
     if self.inp is not None:
       self.inp.close()
       self.inp = None
+
+  def is_empty(self):
+    return len(self.data) <= 0 or len(self.data[-1][1]) <= 0

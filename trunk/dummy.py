@@ -50,10 +50,12 @@ class Audio:
     print 'Audio::stop() not implmented'
   def reset(self):
     print 'Audio::reset() not implmented'
+  def is_empty(self):
+    print 'Audio::is_empty() not implmented'
 
 class GUI:
-  def __init__(self):
-    print 'GUI::__init__() not implemented'
+  def __init__(self, lecture):
+    print 'GUI::__init__(lecture) not implemented'
   def __getitem__(self, key):
     print 'GUI["%s"] not found!' % key
     return None
@@ -96,3 +98,7 @@ class GUI:
     print 'GUI::run() not implemented'
   def deinit(self):
     print 'GUI::deinit() not implemented'
+  def disable_progress_bar(self):
+    print 'GUI::disable_progress_bar() not implemented'
+  def enable_progress_bar(self):
+    print 'GUI::enable_progress_bar() not implemented'

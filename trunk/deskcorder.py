@@ -65,6 +65,9 @@ class Lecture(object):
     '''Returns [] (not None) if empty so len() works.'''
     return self.slides[-1] if len(self.slides) > 0 else []
 
+  def is_empty(self):
+    return self.num_strokes() <= 0
+
   def add_move(self, pos, t = None):
     if type(pos) == tuple:
       if t is None:
@@ -86,6 +89,9 @@ class Lecture(object):
 
   def get_strokes(self):
     return [stroke for slide in self.slides for stroke in slide.strokes]
+
+  def num_strokes(self):
+    return reduce(lambda a,b: a+b, map(lambda x: len(x), self.slides), 0)
 
   def get_points(self):
     return [point for stroke in self.get_strokes() for point in stroke.points]
@@ -120,7 +126,10 @@ class Lecture(object):
 
   def get_duration(self):
     '''Computes the duration in s of the lecture.'''
-    return self.get_time_of_last_event() - self.get_time_of_first_event()
+    last = self.get_time_of_last_event()
+    first = self.get_time_of_first_event()
+    print 'last:%f first:%f' % (last, first)
+    return last - first
 
 
 class Slide(object):
@@ -257,8 +266,10 @@ class Deskcorder:
     self.break_times = []
     self.last_pause = None
 
+    self.lecture = Lecture(time.time())
+
     self.audio = Audio()
-    self.gui = GUI()
+    self.gui = GUI(self.lecture)
 
     self.gui.connect_new(self.reset)
     self.gui.connect_play(self.play)
@@ -277,6 +288,14 @@ class Deskcorder:
 
     self.progress = -1
 
+  def is_empty(self):
+    return self.lecture.is_empty() and self.audio.is_empty()
+
+  def all_buttons_off(self):
+    self.gui.record_pressed(False)
+    self.gui.play_pressed(False)
+    self.gui.pause_pressed(False)
+
   def set_progress(self, val):
     self.progress = val
     self.audio.set_progress(val + self.earliest_event_time())
@@ -288,6 +307,8 @@ class Deskcorder:
     self.stroke_i = 0
     self.point_i = 0
 
+    if self.lecture.is_empty(): return
+
     ttpt = self.progress + self.earliest_event_time()
     for i in xrange(1,len(self.gui.canvas.lecture)):
       if self.gui.canvas.lecture[i].t > ttpt:
@@ -297,8 +318,7 @@ class Deskcorder:
         return
 
     self.slide_i = len(self.gui.canvas.lecture) - 1
-    while not self.play_iters_valid():
-      continue
+    self.play_iters_valid() # makes sure they are, if they can be.
 
   def get_duration(self):
     start_t = self.earliest_event_time()
@@ -324,6 +344,8 @@ class Deskcorder:
     '''Clears the state of the canvas and audio, as if the system had just
     started.'''
     if not self.gui.canvas.dirty or self.gui.dirty_new_ok():
+      self.all_buttons_off()
+      self.gui.progress_slider_value(.0)
       self.gui.canvas.reset()
       self.audio.reset()
       self.stop()
@@ -349,11 +371,13 @@ class Deskcorder:
   def record(self, rec):
     '''Starts the mic recording.'''
     if rec:
+      self.gui.disable_progress_bar()
       try:
         self.audio.record()
       except recorder.InvalidOperationError:
         self.gui.record_pressed(False)
     else:
+      self.gui.enable_progress_bar()
       self.audio.stop()
 
   def is_playing(self):
@@ -362,6 +386,10 @@ class Deskcorder:
 
   def play(self, active):
     '''Start/stop playing what's in this file.'''
+    if self.is_empty():
+      self.all_buttons_off()
+      return
+
     if not active:
       if self.is_paused():
         self.gui.play_pressed(True)
@@ -509,6 +537,10 @@ class Deskcorder:
 
   def pause(self, checked):
     '''Pauses playback and audio recording.'''
+    if self.is_empty():
+      self.all_buttons_off()
+      return
+
     now = time.time()
     if self.is_playing():
       if self.last_pause == None:
@@ -552,17 +584,31 @@ class Deskcorder:
 
   def fmt_progress(self, val):
     dur = self.get_duration()
-    total = '%d:%02d' % (dur / 60, dur % 60)
-    if self.is_playing():
-      return '%d:%02d / %s' % (self.progress / 60, self.progress % 60, total)
+    total = '%d:%02d' % (dur / 60, math.ceil(dur % 60))
+    if self.is_empty():
+      if self.gui.progress_slider_value() != 0:
+        self.gui.progress_slider_value(.0)
+      return '0:00 / 0:00'
+    elif self.is_playing():
+      return '%d:%02d / %s' % (round(self.progress / 60), self.progress % 60, total)
     else:
-      return '0:00 / %s' % (total)
+      return '0:00 / %s' % total
 
   def move_progress(self, val):
-    #print 'progress moved to %.0f%%' % (val * 100)
-    self.gui.play_pressed(True)
-    self.gui.pause_pressed(True)
-    self.set_progress(val * self.get_duration())
+    print 'progress moved to %.0f%%' % (val * 100)
+    if self.is_empty():
+      print "  --> but I'm empty"
+      self.all_buttons_off()
+      # Can't set progress here, because may be in reaction to a mouse click,
+      # in which case an update will get immediately overwritten by the
+      # mouse-up event, or whatever is responsible for it.
+      return
+    elif self.is_recording():
+      pass # do nothing?
+    else:
+      self.gui.play_pressed(True)
+      self.gui.pause_pressed(True)
+      self.set_progress(val * self.get_duration())
 
 
 
