@@ -23,16 +23,14 @@ FORMATS = {'dcx': "Whiteboard XML file",
 DCB_MAGIC_NUMBER = '\x42\xfa\x32\xba\x22\xaa\xaa\xbb'
 
 
-def VersionError(Exception):
+class VersionError(Exception):
   '''Raised when an unexpected version is encountered by one of the load
   functions.'''
-  def __init__(self, v):
-    Exception.__init__(self, "Could not import version %d.%d.%d" % v)
+  pass
 
-def FormatError(Exception):
+class FormatError(Exception):
   '''Raised when an unrecoverable formatting error takes place.'''
-  def __init__(self, v):
-    Exception.__init__(self, "File could not be read.")
+  pass
 
 
 
@@ -73,23 +71,26 @@ def load_wav(fname):
 def load(fname, win_sz = (1,1)):
   '''Reads in a file and returns a 2-tuple of lecture an audio.'''
   if fname.lower().endswith(".dcx"):
-    return load_dcx(fname, win_sz)
+    return _load_dcx(fname, win_sz)
   elif fname.lower().endswith(".dct"):
-    return load_dct(fname, win_sz)
+    return _load_dct(fname, win_sz)
   else:
-    return load_dcb(fname, win_sz)
+    try:
+      return _load_dcb(fname, win_sz)
+    except FormatError:
+      return ()
 
 def save(fname, trace = None, audiofiles = [], req_v = DC_REC_VERSION):
   '''Writes out a lecture and set of audio snippets to a file.'''
   if trace is None: return
   if fname.lower().endswith(".dcx"):
-    save_dcx(fname, trace, audiofiles, req_v)
+    _save_dcx(fname, trace, audiofiles, req_v)
   elif fname.lower().endswith(".dct"):
-    save_dct(fname, trace, audiofiles, req_v)
+    _save_dct(fname, trace, audiofiles, req_v)
   else:
-    save_dcb(fname, trace, audiofiles, req_v)
+    _save_dcb(fname, trace, audiofiles, req_v)
 
-def save_dcb(fname = 'save.dcb', lecture = None, audiofiles = [], req_v = DC_REC_VERSION):
+def _save_dcb(fname = 'save.dcb', lecture = None, audiofiles = [], req_v = DC_REC_VERSION):
   '''Writes DCB-v0.1.1'''
   if lecture is None: return
   f = open(fname, 'wb')
@@ -145,12 +146,12 @@ def bin_read(f, fmt):
   '''Reads file f using struct to get datatypes shown in fmt.'''
   return struct.unpack(fmt, f.read(struct.calcsize(fmt)))
 
-def load_dcb(fname = 'save.dcb', win_sz = (1,1)):
+def _load_dcb(fname = 'save.dcb', win_sz = (1,1)):
   '''Loads DCB-v0.1.1'''
   f = open(fname, 'rb')
   f_log = open(fname + '.load_log', 'w')
   if f.read(8) != DCB_MAGIC_NUMBER:
-    raise AttributeError("Magic number does not match.")
+    raise FormatError("Magic number does not match.")
   f_log.write('Magic number!\n')
 
   v = bin_read(f, "<III")  # file version
@@ -221,7 +222,7 @@ def load_dcb(fname = 'save.dcb', win_sz = (1,1)):
   f_log.close()
   return lec, audiofiles
 
-def save_dcx(fname = 'save.dcx', lecture = [], audiofiles = [], req_v = DC_REC_VERSION):
+def _save_dcx(fname = 'save.dcx', lecture = [], audiofiles = [], req_v = DC_REC_VERSION):
   '''Saves DCX-v0.1.1
   @lecture: A complex list.  See the Canvas object for details.
   @audiofiles: A list of (t,data) tuples'''
@@ -261,7 +262,7 @@ def save_dcx(fname = 'save.dcx', lecture = [], audiofiles = [], req_v = DC_REC_V
   f.flush()
   f.close()
 
-def load_dcx(fname = 'save.dcx', win_sz = (1,1)):
+def _load_dcx(fname = 'save.dcx', win_sz = (1,1)):
   '''Reads DCX-v*.
   @win_sz: Needed to scale the (x,y) coords.'''
   # TODO unify these functions.
@@ -500,7 +501,7 @@ def load_dcx_0(fname = 'strokes.dcx', window_size = (640,480)):
   ifile.close()
   return (trace, position)
 
-def save_dct(fname = "save.dct", trace = [], positions = [], audiofiles = [], req_v = DC_REC_VERSION):
+def _save_dct(fname = "save.dct", trace = [], positions = [], audiofiles = [], req_v = DC_REC_VERSION):
   '''Saves DCT-v0.0.0'''
   output = open(fname, 'w')
   clears = []
@@ -557,7 +558,7 @@ def __parse_version_string(version):
 
   return maj, min, bug
 
-def load_dct(fname = 'save.dct', win_sz = (1,1)):
+def _load_dct(fname = 'save.dct', win_sz = (1,1)):
   '''Reads the input 'f' and assumes that the file's pointer is already at one
   past the version string.  Returns a recursively-tupled representation of the
   contents of the file based on the version tuple given.'''
@@ -635,7 +636,7 @@ def __read_cts(line):
     return 0
   return map(float_or_grace, line.split(' '))
 
-def save_dct(fname = 'save.dct', trace = [], positions = [], audiofiles = []):
+def _save_dct(fname = 'save.dct', trace = [], positions = [], audiofiles = []):
   '''Writes the contents of state to a file using the most current file
   version.'''
   output = open(fname, 'w')

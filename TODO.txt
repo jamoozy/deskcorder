@@ -19,11 +19,10 @@ A list of things to do:
   - Build me ... not sure what with.
   - Finish me ... useful?
 
-4) Undo/Redo:
-  - Make some buttons ... probably just pop off the last stroke ...
-
-5) "go back" feature?
-  - I was thinking something that allows you to go back a
+4) Make some new UI features (buttons/menus)
+  - undo/redo (probably just pop off the last stroke)
+  - eraser (delete stroke vs. large white brush)
+  - "go back" feature?  I was thinking something that allows you to go back a
     slide to add something you just remembered.
     * This would necessitate altering the timestamps
       sequentially, updating them to "fit" the new stuff in.

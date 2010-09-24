@@ -406,10 +406,14 @@ class GUI:
     fcd.set_do_overwrite_confirmation(True)
     fcd.set_current_folder('saves')
     self.add_filters(fcd)
-    if fcd.run() == gtk.RESPONSE_ACCEPT:
+    while fcd.run() == gtk.RESPONSE_ACCEPT:
       self.last_fname = fcd.get_filename()
-      self.open_fun(fcd.get_filename())
+      if self.open_fun(fcd.get_filename()):
+        break
+      else:
+        self.ext_err("Invalid or corrupted file.")
     fcd.destroy()
+
 
   def save(self):
     if self.save_fun is None:
@@ -496,6 +500,12 @@ class GUI:
     d.run()
     d.destroy()
 
+  def ext_err(self, msg):
+    '''External error notification dialog box.'''
+    d = gtk.MessageDialog(None, 0, gtk.MESSAGE_ERROR, gtk.BUTTONS_OK, msg)
+    d.run()
+    d.destroy()
+
 
   # -------- Callbacks ---------------------
 
@@ -570,7 +580,6 @@ class GUI:
 
   def progress_slider_value(self, val = None):
     if val is None:
-      print 'returning value'
       return self['pbar-align'].get_value()
     else:
       print 'setting value to "%2.1f%%"' % (100 * val)
@@ -602,8 +611,8 @@ class GUI:
 
 
 class InvalidOperationError(RuntimeError):
-  def __init__(self, msg):
-    RuntimeError.__init__(self, msg)
+  '''Used when an invalid audio operation was made.'''
+  pass
 
 class Audio:
   def __init__(self):

@@ -631,48 +631,21 @@ class Deskcorder:
   def save(self, fname = 'save.dcb'):
     if self.is_recording():
       self.record(False)
-    if fname.lower().endswith(".dcx"):
-      self.save_dcx(fname)
-    elif fname.lower().endswith(".dct"):
-      self.save_dct(fname)
-    else:
-      self.save_dcb(fname)
-
-  def save_dcx(self, fname = "strokes.dcx"):
-    recorder.save_dcx(fname, self.gui.canvas.lecture, self.audio.make_data())
-    self.gui.canvas.dirty = False
-
-  def save_dct(self, fname = "strokes.dct"):
-    recorder.save_dct(fname, self.gui.canvas.lecture, self.audio.make_data())
-    self.gui.canvas.dirty = False
-
-  def save_dcb(self, fname = "strokes.dcb"):
-    recorder.save_dcb(fname, self.gui.canvas.lecture, self.audio.make_data())
+    recorder.save(fname, self.gui.canvas.lecture, self.audio.make_data())
     self.gui.canvas.dirty = False
 
   def load(self, fname = 'save.dcb'):
-    if fname.lower().endswith('.dcx'):
-      self.load_dcx(fname)
-    elif fname.lower().endswith('.dct'):
-      self.load_dct(fname)
-    else:
-      self.load_dcb(fname)
-    self.gui.set_fname(fname)
-
-  def load_dcb(self, fname = 'save.dcb'):
-    self.gui.canvas.lecture, a = recorder.load_dcb(fname)
-    self.audio.load_data(a)
-    self.gui.canvas.dirty = False
-
-  def load_dcx(self, fname = 'save.dcx'):
-    self.gui.canvas.lecture, a = recorder.load_dcx(fname)
-    self.audio.load_data(a)
-    self.gui.canvas.dirty = False
-
-  def load_dct(self, fname = 'save.dcx'):
-    self.gui.canvas.lecture, a = recorder.load_dct(fname)
-    self.audio.load_data(a)
-    self.gui.canvas.dirty = False
+    try:
+      rtn = recorder.load(fname)
+      if len(rtn) > 0:
+        self.gui.canvas.lecture, a = recorder.load(fname)
+        self.audio.load_data(a)
+        self.gui.canvas.dirty = False
+        self.gui.set_fname(fname)
+        return True
+      return False
+    except recorder.FormatError:
+      return False
 
 
 
