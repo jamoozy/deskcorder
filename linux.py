@@ -299,6 +299,8 @@ class GUI:
     self["file/quit"].connect("activate", self.quit)
     self["quit"].connect("clicked", self.quit)
 
+    self["help/about"].connect("activate", lambda x: self.about_dialog())
+
     self.save_fun = None
     self.open_fun = None
     self.exp_pdf_fun = None
@@ -309,6 +311,22 @@ class GUI:
 
   def __getitem__(self, key):
     return self.builder.get_object(key)
+
+  def about_dialog(self):
+    '''Shows the about dialog.'''
+    d = gtk.AboutDialog()
+    d.set_name('Deskcorder')
+    d.set_version('0.1')
+    d.set_copyright('GPL v.3')
+    d.set_comments('''Deskcorder is a recorder for what happens at your desk!
+
+Draw and record yourself, then play it back for your friends!  What a party trick!  Be the life of the party!''')
+    d.set_license('GPL v.3')
+    d.set_website('http://deskcorder.googlecode.com')
+    d.set_authors(('Andrew Correa (jamoozy@csail.mit.edu)',
+                   'Ali Mohammad (alawi@csail.mit.edu)'))
+    d.run()
+    d.destroy()
 
   def quit(self, event):
     if not self.canvas.dirty or self.dirty_quit_ok():
