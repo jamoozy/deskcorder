@@ -3,35 +3,38 @@ import math
 import base64
 import xml.dom.minidom
 import struct  # for binary conversions
-import zlib    # to compress audio data
+import zlib    # to compress audio data in v0.1.x
+import speex   # to compress audio data in v0.2.x
 import wave
 
-import deskcorder as dc
+from datatypes import *
 
 # Should appear on first line, to denote which version was used.
 DC_REC_VERSION_PREFIX = 'WB v'
 
 # Current default version.
-DC_REC_VERSION = (0,1,2)
+DC_REC_VERSION = (0,2,0)
+
+# Valid version numbers (ones we can load)
+DC_VALID_VERSIONS = [(0,1,0), (0,1,1), (0,1,2), (0,2,0)]
 
 # Currently-supported formats.
-FORMATS = {'dcx': "Whiteboard XML file",
-           'dct': "Whiteboard text file",
-           'dcr': "Whiteboard raw file"}
+FORMATS = {'dcx': "Deskcorder XML file",
+           'dct': "Deskcorder text file",
+           'dcb': "Deskcorder binary file"}
 
 # Magic number to appear at the beginning of every DCB file.
 DCB_MAGIC_NUMBER = '\x42\xfa\x32\xba\x22\xaa\xaa\xbb'
 
 
-class VersionError(Exception):
-  '''Raised when an unexpected version is encountered by one of the load
-  functions.'''
-  pass
-
 class FormatError(Exception):
   '''Raised when an unrecoverable formatting error takes place.'''
   pass
 
+class VersionError(FormatError):
+  '''Raised when an unrecognized version is loaded.'''
+  def __init__(self, v):
+    FormatError.__init__(self, "Unrecognized version: %d.%d.%d" % v)
 
 
 ############################################################################
@@ -91,34 +94,49 @@ def save(fname, trace = None, audiofiles = [], req_v = DC_REC_VERSION):
     _save_dcb(fname, trace, audiofiles, req_v)
 
 def _save_dcb(fname = 'save.dcb', lecture = None, audiofiles = [], req_v = DC_REC_VERSION):
-  '''Writes DCB-v0.1.1'''
-  if lecture is None: return
+  '''Writes DCB-v0.2.0'''
+  if lecture is None:
+    return
+  if req_v != DC_REC_VERSION:
+    raise VersionError(req_v)
+
   f = open(fname, 'wb')
   f_log = open(fname + ".save_log", 'w')
+
+  # header
   f.write(DCB_MAGIC_NUMBER)
-  f.write(struct.pack("<III", 0, 1, 1))  # file version
+  f.write(struct.pack("<III", req_v[0], req_v[1], req_v[2]))
+  f_log.write("File version: (%d,%d,%d)\n" % req_v)
+  if req_v[1] >= 2:
+    f.write(struct.pack("<f", lecture.aspect_ratio))
+    f_log.write('File has %d slides, ar = %.2f\n' \
+        % (len(lecture.slides), lecture.aspect_ratio))
+  else:
+    f_log.write('File will have %d slides\n' % len(lecture.slides))
+
   f.write(struct.pack("<I", len(lecture)))
-  f_log.write('File will have %d slides\n' % len(lecture.slides))
-  for slide in lecture.slides:
+  for slide in lecture.slides:  # Slide block
     f.write(struct.pack("<QI", int(slide.t * 1000), len(slide))) # tstamp & number of strokes
-    f_log.write('  slide: %d strokes at %.0fms' % (len(slide), slide.t))
+    f_log.write('  slide: %d strokes at %.0fms\n' % (len(slide), slide.t))
     f_log.flush()
-    for stroke in slide.strokes:
+    for stroke in slide.strokes:  # Stroke block
       f.write(struct.pack("<I", len(stroke))) # number of points in stroke
       f_log.write('  stroke has %d points\n' % len(stroke))
       f_log.flush()
-      if len(stroke) > 0:
+      if len(stroke) > 0:  # remainder of Stroke block
         # Stroke color
+        if req_v == (0,2,0):
+          f.write(struct.pack("<ff", stroke.aspect_ratio, stroke.thickness))
+          f_log.write("  stroke has ar = %.2f, th = %.2f\n" \
+              % (stroke.aspect_ratio, stroke.thickness))
         f.write(struct.pack("<fff", stroke.color[0], stroke.color[1], stroke.color[2]))
         f_log.write('  stroke color: (%.3f,%.3f,%.3f)\n' % stroke.color)
         f_log.flush()
         for point in stroke.points:
-          if req_v[2] == 1:
+          if req_v == (0,1,2):
             thickness = point.p / math.sqrt(2)
-          elif req_v[2] == 2:
-            thickness = point.p
           else:
-            raise VersionError(req_v)
+            thickness = point.p
           f.write(struct.pack("<Qfff", point.t * 1000, point.x(), point.y(), thickness))
           f_log.write('    point (%.3f,%.3f) @ %.1f with %.2f%%\n' % (point.x(), point.y(), point.t, thickness * 100))
           f_log.flush()
@@ -133,9 +151,14 @@ def _save_dcb(fname = 'save.dcb', lecture = None, audiofiles = [], req_v = DC_RE
     f_log.flush()
   f.write(struct.pack("<I", len(audiofiles))) # number of audio files
   for af in audiofiles:
-    c_data = zlib.compress(af[1], zlib.Z_BEST_COMPRESSION)
+    if req_v[1] == 1:
+      c_data = zlib.compress(af[1], zlib.Z_BEST_COMPRESSION)
+    elif req_v[1] == 2:
+      s = speex.new(raw = True)
+      c_data = s.encode(af[1])
+
     # tstamp (ms), bytes of data in audio file
-    f.write(struct.pack("<QQ", af[0] * 1000, len(c_data)))
+    f.write(struct.pack("<QQ", int(af[0] * 1000), len(c_data)))
     f_log.write('  audio @ %.2fs with %d bytes\n' % (af[0], len(c_data)))
     f_log.flush()
     f.write(c_data) # (compressed) audio data
@@ -156,55 +179,84 @@ def _load_dcb(fname = 'save.dcb', win_sz = (1,1)):
 
   v = bin_read(f, "<III")  # file version
   f_log.write('version %d.%d.%d\n' % v)
+  if v not in DC_VALID_VERSIONS:
+    raise VersionError(v)
+
   if v[0] == 0:
-    if v[1] == 1:
-      lec = dc.Lecture()
-      audiofiles = []
-      f_log.write("We're at f.tell():%d\n" % f.tell())
-      num_slides = bin_read(f, "<I")[0]  # number of slides
-      f_log.write('%d slides\n' % num_slides)
+    lec = Lecture()
+    audiofiles = []
+    f_log.write("We're at f.tell():%d\n" % f.tell())
+    if v[1] == 2:
+      aspect_ratio = bin_read(f, "<f")[0]
+      f_log.write('aspect ratio: %.2f\n' % aspect_ratio)
       f_log.flush()
-      for slide_i in xrange(num_slides):
-        # tstamp of "clear" (ms), number of strokes in first slide
-        f_log.write("  We're at f.tell():%d\n" % f.tell())
-        t, num_strokes = bin_read(f, "<QI")
-        f_log.write('  slide %d: %d strokes at %.1fs\n' % (slide_i, num_strokes, t / 1000.))
-        f_log.flush()
-        lec.append(t / 1000.)
-        for stroke_i in xrange(num_strokes):
-          # number of points in this stroke, color (r,g,b)
-          f_log.write("    We're at f.tell():%d\n" % f.tell())
-          num_points = bin_read(f, "<I")[0]
-          if num_points > 0:
-            color = bin_read(f, "<fff")
-            f_log.write('    stroke %d: %d points with (%.1f,%.1f,%.1f)\n' % ((stroke_i, num_points) + color))
+      lec.aspect_ratio = aspect_ratio
+    num_slides = bin_read(f, "<I")[0]  # number of slides
+    f_log.write('%d slides\n' % num_slides)
+    f_log.flush()
+    for slide_i in xrange(num_slides):
+      # tstamp of "clear" (ms), number of strokes in first slide
+      f_log.write("  We're at f.tell():%d\n" % f.tell())
+      t, num_strokes = bin_read(f, "<QI")
+      f_log.write('  slide %d: %d strokes at %.1fs\n' \
+          % (slide_i, num_strokes, t / 1000.))
+      f_log.flush()
+      lec.append(t / 1000.)
+      for stroke_i in xrange(num_strokes):
+        # number of points in this stroke, color (r,g,b)
+        f_log.write("    We're at f.tell():%d\n" % f.tell())
+        num_points = bin_read(f, "<I")[0]
+        if num_points > 0:
+          if v[1] >= 2:
+            aspect_ratio, thickness = bin_read(f, "<ff")
+            f_log.write('    stroke %d: thickness: %.2f\n' \
+                % (stroke_i, thickness))
             f_log.flush()
-            lec.last().append(color)
-            for point_i in xrange(num_points):
-              # timestamp (ms), x, y, "thickness"
-              ts, x, y, th = bin_read(f, "<Qfff")
-              f_log.write('      point %d: (%.3f,%.3f) @ %.1fs with %.1f%%\n' % (point_i, x, y, ts / 1000., th * 100))
-              f_log.flush()
-              if v[2] == 1:
-                lec[-1][-1].append((x, y), ts / 1000.0, th)
-              elif v[2] == 2:
-                lec[-1][-1].append((x, y), ts / 1000.0, th * math.sqrt(2))
           else:
-            f_log.write('    Empty stroke!\n')
+            aspect_ratio = 4./3
+            s_thickness = 0
+          color = bin_read(f, "<fff")
+          f_log.write('    stroke %d: %d points with (%.1f,%.1f,%.1f)\n' \
+              % ((stroke_i, num_points) + color))
+          f_log.flush()
+          if v[1] >= 2:
+            lec.last().append(Stroke(color, aspect_ratio, thickness))
+          else:
+            lec.last().append(color)
+          for point_i in xrange(num_points):
+            # timestamp (ms), x, y, "thickness"
+            ts, x, y, th_pr = bin_read(f, "<Qfff")
+            f_log.write('      point %d: (%.3f,%.3f) @ %.1fs with %.1f%%\n' \
+                % (point_i, x, y, ts / 1000., th_pr * 100))
+            f_log.flush()
+            if v[1] < 2:
+              # if this is a previous version, "fake" the correct way of doing
+              # thickness/pressure for the stroke/points.
+              s_thickness += th_pr
+              th_pr = 1.
+            if v == (0,1,1) or v[1] == 2:
+              lec[-1][-1].append((x, y), ts / 1000.0, th_pr)
+            elif v == (0,1,2):
+              lec[-1][-1].append((x, y), ts / 1000.0, th_pr * math.sqrt(2))
+        if v[1] < 2:  # finish pre-v0.2 conversion.
+          lec.last().last().thickness = s_thickness / len(lec.last().last())
+        else:
+          f_log.write('    Empty stroke!\n')
 
-      # number of points
-      f_log.write("We're at f.tell():%d\n" % f.tell())
-      num_moves = bin_read(f, "<I")[0]
-      f_log.write('%d positions\n' % num_moves)
+    # number of points
+    f_log.write("We're at f.tell():%d\n" % f.tell())
+    num_moves = bin_read(f, "<I")[0]
+    f_log.write('%d positions\n' % num_moves)
+    f_log.flush()
+    for pos_i in xrange(num_moves):
+      # tstamp (ms), x, y
+      f_log.write(  "We're at f.tell():%d\n" % f.tell())
+      t, x, y = bin_read(f, "<Qff")
+      f_log.write('  pos %d: (%.3f,%.3f) @ %.1fs\n' % (pos_i, x, y, t / 1000.))
       f_log.flush()
-      for pos_i in xrange(num_moves):
-        # tstamp (ms), x, y
-        f_log.write(  "We're at f.tell():%d\n" % f.tell())
-        t, x, y = bin_read(f, "<Qff")
-        f_log.write('  pos %d: (%.3f,%.3f) @ %.1fs\n' % (pos_i, x, y, t / 1000.))
-        f_log.flush()
-        lec.add_move((x, y), t / 1000.)
+      lec.add_move((x, y), t / 1000.)
 
+    if v != (0,1,0):
       # number of audio files
       f_log.write("We're at f.tell():%d\n" % f.tell())
       num_afs = bin_read(f, "<I")[0]
@@ -217,7 +269,11 @@ def _load_dcb(fname = 'save.dcb', win_sz = (1,1)):
         f_log.write('  Audio %d: %d bytes at %.1fs\n' % (af_i, sz, t / 1000.))
         f_log.flush()
         # data
-        audiofiles.append([t / 1000, zlib.decompress(f.read(sz))])
+        if v[1] == 1:
+          audiofiles.append([t / 1000, zlib.decompress(f.read(sz))])
+        elif v[1] == 2:
+          s = speex.new(raw = True)
+          audiofiles.append([t / 1000, s.decode(f.read(sz))])
   f.close()
   f_log.close()
   return lec, audiofiles
@@ -694,7 +750,7 @@ if __name__ == '__main__':
        (1003.3, (.1, .2), (1,1)),
        (1003.4, (.1, .0), (1,1))]
   a = []
-  lec = dc.Lecture()
+  lec = Lecture()
   lec.load_trace_data(t)
   lec.load_position_data(p)
 

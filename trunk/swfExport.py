@@ -23,7 +23,7 @@ def swfExportWithMP3(lecture, audio_data, fname):
   nframes = int(sum([math.ceil((len(audio_frames)*SWF_FPS)/(44100 * 2.)) for first_ts,audio_frames in audio_data]))
   swfOutput = swf.SWF(fps=SWF_FPS, size=dims, fname=fname, nframes=nframes, compression=6)
   lastMessageLength = 0
-  
+
   fnum = 0
 
   swfOutput.append(swf.SoundStreamHead(sscount=(44100 / SWF_FPS)))
@@ -32,7 +32,7 @@ def swfExportWithMP3(lecture, audio_data, fname):
     prog = 0 ; audio_sample_idx = 0
 
     import os, fcntl
-    
+
     lameInput = os.mkfifo("lamein.fifo")
     lameOR, lameOW = os.pipe()
     lameProcess = subprocess.Popen( \
@@ -66,7 +66,7 @@ def swfExportWithMP3(lecture, audio_data, fname):
       finally:
         print "read a total of %d bytes" % (count)
       audio_sample_idx = new_sample_idx
-      
+
       #
       # write strokes
       shapes = []
@@ -155,7 +155,7 @@ def swfExportWithAudio(lecture, audio_data, fname):
   nframes = int(sum([math.ceil((len(audio_frames)*SWF_FPS)/(44100 * 2.)) for first_ts,audio_frames in audio_data]))
   swfOutput = swf.SWF(fps=SWF_FPS, size=dims, fname=fname, nframes=nframes, compression=6)
   lastMessageLength = 0
-  
+
   fnum = 0
 
   swfOutput.append(swf.SoundStreamHead(sscount=(44100 / SWF_FPS)))
@@ -174,7 +174,7 @@ def swfExportWithAudio(lecture, audio_data, fname):
       new_sample_idx = int((prog + 1.0/SWF_FPS) * 44100) * 2
       swfOutput.append(swf.SoundStreamBlock(audio_frames[audio_sample_idx:new_sample_idx]))
       audio_sample_idx = new_sample_idx
-      
+
       #
       # write strokes
       shapes = []
