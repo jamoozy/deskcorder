@@ -1,11 +1,5 @@
 A list of things to do:
 
-0) BUGS:
-  - Here's a weird one when used with linux.py:
-    * Load a file at the start (on the CL)
-    * Record without mic plugged in for a brief period.
-    * Hit play and watch the weirdness ...
-
 1) Core functionality:
   - Make dummy.GUI() and dummy.Audio() correct
     * add all functions
