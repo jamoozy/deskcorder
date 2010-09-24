@@ -65,12 +65,13 @@ class Canvas(gtk.DrawingArea):
 
   def draw_last_slide(self):
     for stroke in self.lecture.last():
-      self.draw(stroke.color, stroke[0].p, stroke[0].pos)
+      self.draw(stroke.color, stroke.thickness*stroke[0].p, stroke[0].pos)
       if len(stroke) > 1:
-        self.draw(stroke.color, stroke[1].p, stroke[0].pos, stroke[1].pos)
+        self.draw(stroke.color, stroke.thickness*stroke[1].p,
+            stroke[0].pos, stroke[1].pos)
       for i in xrange(len(stroke)-2):
-        self.draw(stroke.color, stroke[i+2].p,
-          stroke[i].pos, stroke[i+1].pos, stroke[i+2].pos)
+        self.draw(stroke.color, stroke.thickness*stroke[i+2].p,
+            stroke[i].pos, stroke[i+1].pos, stroke[i+2].pos)
 
   def draw_to_ttpt(self):
     stroke = None
@@ -340,7 +341,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
       self.last_fname = fname
 
 
-  # -------- Import/Export dialogues.
+  # -------- Import/Export dialogs.
 
 #  def frame_selector(self):
 #    b = gtk.Builder()
@@ -619,7 +620,6 @@ Draw and record yourself, then play it back for your friends!  What a party tric
     if val is None:
       return self['pbar-align'].get_value()
     else:
-      print 'setting value to "%2.1f%%"' % (100 * val)
       self['pbar-align'].set_value(min(max(0., val), 1.))
       self['progress-bar'].queue_draw()
 
