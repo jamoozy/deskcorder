@@ -365,7 +365,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
     #frames = self.frame_selector()
     frames = []
 
-    fcd = gtk.FileChooserDialog('Choose a file to epxort to', None,
+    fcd = gtk.FileChooserDialog('Choose a PNG file to export to', None,
         gtk.FILE_CHOOSER_ACTION_SAVE, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
           gtk.STOCK_SAVE, gtk.RESPONSE_ACCEPT))
     fcd.set_do_overwrite_confirmation(True)
@@ -374,7 +374,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
       fcd.set_current_name(self.last_fname[:-4] + '.png')
     else:
       fcd.set_current_name('save.png')
-    self.add_filters(fcd)
+    self.add_png_filters(fcd)
     if fcd.run() == gtk.RESPONSE_ACCEPT:
       self.exp_png_fun(fcd.get_filename(), (800,600), None)
       fcd.destroy()
@@ -387,7 +387,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
       self.int_err('Export to PDF functionality disabled.')
       return
 
-    fcd = gtk.FileChooserDialog('Choose a file to epxort to', None,
+    fcd = gtk.FileChooserDialog('Choose a PDF file to export to', None,
         gtk.FILE_CHOOSER_ACTION_SAVE, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
           gtk.STOCK_SAVE, gtk.RESPONSE_ACCEPT))
     fcd.set_do_overwrite_confirmation(True)
@@ -396,7 +396,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
       fcd.set_current_name(self.last_fname[:-4] + '.pdf')
     else:
       fcd.set_current_name('save.pdf')
-    self.add_filters(fcd)
+    self.add_pdf_filters(fcd)
     if fcd.run() == gtk.RESPONSE_ACCEPT:
       self.exp_pdf_fun(fcd.get_filename(), (800,600), None)
       fcd.destroy()
@@ -423,7 +423,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
           gtk.STOCK_OPEN, gtk.RESPONSE_ACCEPT))
     fcd.set_do_overwrite_confirmation(True)
     fcd.set_current_folder('saves')
-    self.add_filters(fcd)
+    self.add_dc_filters(fcd)
     while fcd.run() == gtk.RESPONSE_ACCEPT:
       self.last_fname = fcd.get_filename()
       if self.open_fun(fcd.get_filename()):
@@ -455,7 +455,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
     fcd.set_do_overwrite_confirmation(True)
     fcd.set_current_folder('saves')
     fcd.set_current_name('save.dcb')
-    self.add_filters(fcd)
+    self.add_dc_filters(fcd)
     if fcd.run() == gtk.RESPONSE_ACCEPT:
       self.last_fname = fcd.get_filename()
       self.save_fun(fcd.get_filename())
@@ -468,19 +468,38 @@ Draw and record yourself, then play it back for your friends!  What a party tric
   # ---------- Dialogs ------------------------------
 
   @staticmethod
-  def add_filters(fcd):
-    filters = [("DC binary", "*.dcb"),
-               ("DC XML", "*.dcx"),
-               ("DC text", "*.dct"),
-               ("All DC Files", "*.dc[bxt]"),
-               ('PDF files', '*.pdf'),
-               ('PNG files', '*.png'),
-               ("All files", "*.*")]
-    for t in filters:
-      f = gtk.FileFilter()
-      f.set_name(t[0])
-      f.add_pattern(t[1])
-      fcd.add_filter(f)
+  def add_filter(fcd, ft):
+    '''Adds "filter tuple" ft to the fcd dialog.'''
+    if type(ft) != tuple:
+      raise RuntimeError('not a tuple, as expected')
+    f = gtk.FileFilter()
+    f.set_name(ft[0])
+    f.add_pattern(ft[1])
+    fcd.add_filter(f)
+
+  @staticmethod
+  def add_dc_filters(fcd):
+    GUI.add_filter(fcd, ("DC binary", "*.dcb"))
+    GUI.add_filter(fcd, ("DC XML", "*.dcx"))
+    GUI.add_filter(fcd, ("DC text", "*.dct"))
+    GUI.add_filter(fcd, ("All DC Files", "*.dc[bxt]"))
+    GUI.add_filter(fcd, ("All files", "*.*"))
+
+  @staticmethod
+  def add_pdf_filters(fcd):
+    GUI.add_filter(fcd, ('PDF files', '*.pdf'))
+    GUI.add_dc_filters(fcd)
+
+  @staticmethod
+  def add_png_filters(fcd):
+    GUI.add_filter(fcd, ('PNG files', '*.png'))
+    GUI.add_dc_filters(fcd)
+
+  @staticmethod
+  def add_all_filters(fcd):
+    GUI.add_filter(fcd, ('PDF files', '*.pdf'))
+    GUI.add_filter(fcd, ('PNG files', '*.png'))
+    GUI.add_dc_filters(fcd)
 
   def dirty_quit_ok(self):
     return self.dirty_ok("Quit", 'quitting')
