@@ -18,11 +18,101 @@ import exporter
 class Lecture(object):
   '''A state object.  This object is the representation of the lecture (get
   the name now???) of the pen through the run of a program.'''
+  class Iterator(object):
+    def __init__(self, lec, offset = None):
+      self.lecture = lec
+      self.last_prog = 0
+
+      # This tells me what I'm returning.
+      self._return_type = 'slide'
+
+      # Difference between "I'm just about to start" and "I just finished" is
+      # the difference in the value of this boolean.
+      self.complete = False
+      self.slide_i = 0
+      self.strok_i = 0
+      self.point_i = -1
+      self._next = []
+      self._inc(newStroke = True)
+      self.offset = offset or self.lecture.get_time_of_first_event()
+
+    def next(self, prog = None):
+      '''Two modes of operation:
+  1) Call without 'prog'ress and you will simply get the next element (slide,
+     stroke, or point)
+  2) Call with progress, and you will get all elements between the last time
+     you called this function and now.'''
+      if prog is None:  # Default "get me the next one"
+        if self.has_next():
+          if len(self._next) > 0:
+            return self._next.pop()
+          try:
+            return self.lecture[self.slide_i][self.strok_i][self.point_i]
+          finally:
+            self._inc()
+        else:
+          return None
+      # Get me everything not yet returned, that should be displayed
+      # (may skip the end part of a slide if between this call and the previous
+      # one those things were drawn, but the screen was already cleared.
+      # Poor them -_- )
+      else:
+        abs_prog = self.offset + prog
+        elems = []
+        while self.has_next():
+          e = self.next()
+          if e.t <= self.last_prog: # shouldn't ever happen
+            print "weird, it does happen"
+            pass
+          elif e.t <= abs_prog:
+            elems.append(e)
+          else:
+            self._next.append(e)
+            break
+#          print e
+        self.last_prog = abs_prog
+        return elems
+    
+    def has_next(self):
+      return (len(self._next) > 0) or (not self.complete)
+    
+    def _validate(self):
+      if self.slide_i < len(self.lecture):
+        while self.strok_i < len(self.lecture[self.slide_i]):
+          if self.point_i < len(self.lecture[self.slide_i][self.strok_i]):
+            return
+          self.point = 0
+          self.strok_i += 1
+      self.complete = True
+    
+    def _inc(self, newStroke = False):
+      self.point_i += 1
+      newSlide = False
+      while self.slide_i < len(self.lecture):
+        if newSlide:
+          self._next.insert(0, self.lecture[self.slide_i])
+        while self.strok_i < len(self.lecture[self.slide_i]):
+          if self.point_i < len(self.lecture[self.slide_i][self.strok_i]):
+            if newStroke:
+              self._next.insert(0, self.lecture[self.slide_i][self.strok_i])
+            return
+          self.point_i = 0
+          self.strok_i += 1
+          newStroke = True
+        self.point_i = 0
+        self.strok_i = 0
+        self.slide_i += 1
+        newSlide = True
+      self.complete = True
+
   def __init__(self, t = None):
     '''Initialize a blank state object.  If you have internal data (formerly
     known as a "trace"), then you can just pass that here.'''
     self.slides = [] if t is None else [Slide(t)]
     self.moves = []  # like strokes, except the pen is up
+
+  def __iter__(self):
+    return Lecture.Iterator(self)
 
   def load_trace_data(self, data):
     '''Load from the old, tuple-ized format.'''
@@ -217,6 +307,13 @@ class Stroke(object):
       self.points.append(pos)
     else:
       raise RuntimeError('Excpected tuple, list, or Point')
+
+  def get_start_t(self):
+    if len(self) == 0:
+      return 0
+    return self.first().t
+
+  t = property(get_start_t)
 
 class Point(object):
   @staticmethod
