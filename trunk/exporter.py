@@ -146,7 +146,7 @@ def _to_swf_raw_audio(lecture, audio_data, fname):
       thickness = 0.01
       shapes = []
       shape_extents = []
-      styles = styles[-1:]
+      oldStyles = styles[-1:] ; styles = []
       for e in it.next(prog):
         if type(e) == Slide:
           styles = []
@@ -161,6 +161,8 @@ def _to_swf_raw_audio(lecture, audio_data, fname):
         elif type(e) == Point:
           x, y = int(e.x() * dims[0]), int(e.y() * dims[1])
           p = int(dimScale * thickness * e.p)
+          if len(styles) == 0:
+            styles = oldStyles
           if last_point:
             if len(shapes) == 0:
               shapes.append([last_point])
@@ -236,7 +238,7 @@ def _to_swf_no_audio(lecture, fname):
     shapes = []
     shape_extents = []
     prog = fnum / (float(SWF_FPS))
-    styles = styles[-1:]
+    oldStyles = styles[-1:] ; styles = []
     for e in it.next(prog):
       if type(e) == Slide:
         styles = []
@@ -251,6 +253,8 @@ def _to_swf_no_audio(lecture, fname):
       elif type(e) == Point:
         x, y = int(e.x() * dims[0]), int(e.y() * dims[1])
         p = int(dimScale * thickness * e.p)
+        if len(styles) == 0:
+          styles = oldStyles
         if last_point:
           if len(shapes) == 0:
             shapes.append([last_point])
