@@ -28,6 +28,9 @@ it.  More generally, you can think of this as a ``session''.'''
       self._inc(newStroke = True)
       self.offset = offset or self.lecture.get_time_of_first_event()
 
+    def seek(self, offset):
+      self.offset = offset
+
     def next(self, prog = None):
       '''Two modes of operation:
   1) Call without 'prog'ress and you will simply get the next element (slide,
@@ -44,10 +47,10 @@ it.  More generally, you can think of this as a ``session''.'''
             self._inc()
         else:
           return None
-      # Get me everything not yet returned, that should be displayed
-      # (may skip the end part of a slide if between this call and the previous
-      # one those things were drawn, but the screen was already cleared.
-      # Poor them -_- )
+      # Get me everything not yet returned, that should be displayed (may skip
+      # the end part of a slide if between this call and the previous one
+      # those things were drawn, but the screen was already cleared.  Poor
+      # them -_- )
       else:
         abs_prog = self.offset + prog
         elems = []
@@ -129,6 +132,9 @@ known as a "trace"), then you can just pass that here.'''
 
   def __str__(self):
     return 'Lecture with %d slides' % len(self.slides)
+
+  def __iter__(self):
+    return Lecture.Iterator(self)
 
   def __getitem__(self, i):
     return self.slides[i]
@@ -298,6 +304,13 @@ class Stroke(object):
     else:
       raise RuntimeError('Excpected tuple, list, or Point')
 
+  def get_start_t(self):
+    if len(self) == 0:
+      return 0
+    return self.first().t
+
+  t = property(get_start_t)
+
 class Point(object):
   @staticmethod
   def from_trace_data(p):
@@ -332,4 +345,10 @@ class Point(object):
 
   def y(self):
     return self.pos[1]
+
+class AData(object):
+  '''Audio data.'''
+  def __init__(self, a_data):
+    self.t = time.time() if t is None else t
+    self.data = []
 

@@ -13,10 +13,13 @@ import time
 import math
 import sys
 
-import deskcorder as dc
+# for debugging
+import traceback
+
+from datatypes import *
 
 class Canvas(gtk.DrawingArea):
-  def __init__(self, lecture):
+  def __init__(self, dc):
     gtk.DrawingArea.__init__(self)
 
     self.radius = 3.0
@@ -36,7 +39,7 @@ class Canvas(gtk.DrawingArea):
     # Audio.
     self.frozen = False
 
-    self.lecture = lecture
+    self.dc = dc
 
     self.set_events(gtk.gdk.POINTER_MOTION_MASK |
                     gtk.gdk.BUTTON_MOTION_MASK |
@@ -55,7 +58,7 @@ class Canvas(gtk.DrawingArea):
     self.set_size_request(800,600)
 
   def get_time_of_first_event(self):
-    self.lecture.get_time_of_first_event()
+    self.dc.lecture.get_time_of_first_event()
 
   def freeze(self):
     self.frozen = True
@@ -64,29 +67,34 @@ class Canvas(gtk.DrawingArea):
     self.frozen = False
 
   def draw_last_slide(self):
-    for stroke in self.lecture.last():
-      self.draw(stroke.color, stroke.thickness*stroke[0].p, stroke[0].pos)
-      if len(stroke) > 1:
-        self.draw(stroke.color, stroke.thickness*stroke[1].p,
+    for stroke in self.dc.lecture.last():
+      if len(stroke) < 1: continue
+      elif len(stroke) < 2:
+        self.draw(stroke.color, stroke.thickness * stroke[0].p, stroke[0].pos)
+      elif len(stroke) < 3:
+        self.draw(stroke.color, stroke.thickness * stroke[1].p,
             stroke[0].pos, stroke[1].pos)
-      for i in xrange(len(stroke)-2):
-        self.draw(stroke.color, stroke.thickness*stroke[i+2].p,
-            stroke[i].pos, stroke[i+1].pos, stroke[i+2].pos)
+      else:
+        for i in xrange(len(stroke)-2):
+          self.draw(stroke.color, stroke.thickness * stroke[i+2].p,
+              stroke[i].pos, stroke[i+1].pos, stroke[i+2].pos)
 
   def draw_to_ttpt(self):
     stroke = None
-    for i in xrange(len(self.lecture)-1):
-      if self.lecture[i].t < self.ttpt and self.ttpt < self.lecture[i+1]:
-        stroke = self.lecture[i]
+    for i in xrange(len(self.dc.lecture)-1):
+      if self.dc.lecture[i].t < self.ttpt and self.ttpt < self.dc.lecture[i+1]:
+        stroke = self.dc.lecture[i]
         break
 
-    for stroke in self.lecture[i]:
+    for stroke in self.dc.lecture[i]:
       if len(stroke) > 1:
         if stroke[1].t < self.ttpt:
-          self.draw(stroke.color, stroke[0].p, stroke[0].pos, stroke[1].pos)
+          self.draw(stroke.color, stroke.thickness * stroke[0].p,
+              stroke[0].pos, stroke[1].pos)
         for i in xrange(len(stroke)-2):
           if stroke[i].t < self.ttpt:
-            self.draw(stroke.color, stroke[i].p, stroke[i].pos, stroke[i+1].pos, stroke[i+2].pos)
+            self.draw(stroke.color, stroke.thickness * stroke[i].p,
+                stroke[i].pos, stroke[i+1].pos, stroke[i+2].pos)
           else:
             return
 
@@ -104,15 +112,17 @@ class Canvas(gtk.DrawingArea):
     self.refresh()
 
   def get_pressure_or_default(self, device, default = None):
-    lecture = device.get_state(self.window)
-    p = device.get_axis(lecture[0], gtk.gdk.AXIS_PRESSURE)
+    state = device.get_state(self.window)
+    p = device.get_axis(state[0], gtk.gdk.AXIS_PRESSURE)
     return default if default is not None and p is None else p
 
   def gtk_button_press(self, widget, event):
     if not self.frozen:
       self.dirty = True
       self.drawing = True
-      self.lecture.last().append(self.color)
+      ratio = self.size[0] / float(self.size[1])
+      self.dc.lecture.last().append(Stroke(self.color, ratio,
+          self.radius / math.sqrt(self.size[0]**2 + self.size[1]**2)))
 
   def gtk_motion(self, widget, event):
     if not self.frozen:
@@ -121,16 +131,16 @@ class Canvas(gtk.DrawingArea):
       if self.drawing:
         self.dirty = True
         p = self.get_pressure_or_default(event.device, .5)
-        r = (p * 2 + 0.2) * self.radius / math.sqrt(self.size[0]**2 + self.size[1]**2)
-        if len(self.lecture.last().last()) > 1:
-          self.draw(self.color, r, self.lecture[-1][-1][-2].pos, self.lecture[-1][-1][-1].pos, pos)
-        elif len(self.lecture.last().last()) > 0:
-          self.draw(self.color, r, self.lecture[-1][-1][-1].pos, pos)
+        r = p * self.dc.lecture.last().last().thickness
+        if len(self.dc.lecture.last().last()) > 1:
+          self.draw(self.color, r, self.dc.lecture[-1][-1][-2].pos, self.dc.lecture[-1][-1][-1].pos, pos)
+        elif len(self.dc.lecture.last().last()) > 0:
+          self.draw(self.color, r, self.dc.lecture[-1][-1][-1].pos, pos)
         else:
           self.draw(self.color, r, pos)
-        self.lecture.last().last().append(pos, time.time(), r)
+        self.dc.lecture.last().last().append(pos, time.time(), p)
       else:
-        self.lecture.add_move(pos, time.time())
+        self.dc.lecture.add_move(pos, time.time())
 
   def gtk_button_release(self, widget, event):
     if not self.frozen:
@@ -149,11 +159,16 @@ class Canvas(gtk.DrawingArea):
     cr.rectangle(0.0, 0.0, self.size[0], self.size[1])
     cr.stroke()
 
-  def setRadius(self, rad):
+  def set_radius(self, rad):
     self.radius = rad
 
-  def setColor(self, r, g, b):
-    self.color = (r,g,b)
+  def setColor(self, r, g = None, b = None):
+    if type(r) == tuple and len(r) == 3:
+      self.color = r
+    elif g is None or b is None:
+      raise AttributeError("sign. is setColor((r,g,b)) or setColor(r,g,b)")
+    else:
+      self.color = (r,g,b)
 
   def clear(self):
     self.size = self.window.get_size()
@@ -162,7 +177,7 @@ class Canvas(gtk.DrawingArea):
     self.raster_cr.fill()
     self.refresh()
     if not self.frozen:
-      self.lecture.append(time.time())
+      self.dc.lecture.append(time.time())
 
   def refresh(self):
     reg = gtk.gdk.Region()
@@ -171,7 +186,7 @@ class Canvas(gtk.DrawingArea):
 
   def reset(self):
     self.clear()
-    self.lecture = dc.Lecture(time.time())
+    self.dc.lecture = Lecture(time.time())
     self.positions = []
     self.dirty = False
     self.frozen = False
@@ -234,18 +249,14 @@ class ExportDialog(gtk.Dialog):
     return 0
 
 class GUI:
-  def __init__(self, lecture):
+  def __init__(self, dc):
     # Set up most of the window (from XML file).
-    #GUI.load_accel_map()
-
     self.builder = gtk.Builder()
     self.builder.add_from_file('layout.gtk')
-
-    self.root = self["root"]
-    self.root.connect("destroy", lambda x: sys.exit(0))
+    self['root'].connect("destroy", lambda x: sys.exit(0))
 
     # Add the canvas, too.
-    self.canvas = Canvas(lecture)
+    self.canvas = Canvas(dc)
     self.canvas.show()
     self["vbox1"].add(self.canvas)
     self["clear"].connect("clicked", lambda x: self.canvas.clear())
@@ -253,16 +264,17 @@ class GUI:
     self.last_fname = None
 
     # import/export
-    self['file/exp-png'].connect("activate", lambda x: self.exp_png())
-    self['file/exp-pdf'].connect("activate", lambda x: self.exp_pdf())
+    self['file/export/png'].connect("activate", lambda x: self.exp_png())
+    self['file/export/pdf'].connect("activate", lambda x: self.exp_pdf())
+    self['file/export/swf'].connect("activate", lambda x: self.exp_swf())
 
     # pen widths
     self["thin"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setRadius(1.5))
+        lambda x: x.get_active() and self.canvas.set_radius(1.5))
     self["medium"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setRadius(3.0))
+        lambda x: x.get_active() and self.canvas.set_radius(3.0))
     self["thick"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setRadius(6.0))
+        lambda x: x.get_active() and self.canvas.set_radius(6.0))
 
     # colors
     self["black"].connect("toggled",
@@ -288,7 +300,7 @@ class GUI:
     self["white"].connect("toggled",
         lambda x: x.get_active() and self.canvas.setColor(1.0, 1.0, 1.0))
 
-    self.root.connect("delete-event", lambda x,y: gtk.main_quit())
+    self['root'].connect("delete-event", lambda x,y: gtk.main_quit())
 
     self["edit/add"].connect("activate", lambda x: self.canvas.clear())
     self["add"].connect("clicked", lambda x: self.canvas.clear())
@@ -306,7 +318,7 @@ class GUI:
     self.open_fun = None
     self.exp_pdf_fun = None
     self.exp_png_fun = None
-    self.imp_pdf_fun = None
+    self.imp_swf_fun = None
 
     self.canvas.set_extension_events(gtk.gdk.EXTENSION_EVENTS_ALL)
 
@@ -334,7 +346,6 @@ Draw and record yourself, then play it back for your friends!  What a party tric
       gtk.main_quit()
 
   def set_fname(self, fname):
-    print 'called with "%s"' % fname
     try:
       self.last_fname = fname[fname.rindex('/')+1:]
     except ValueError:
@@ -348,7 +359,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
 #    b.load_from_file('exp-dialog.gtk')
 #    model = b.builder.get_object('treeview').get_model()
 #
-#    tstamps = map(lambda x: x.t - .1, self.canvas.lecture.slides[1:]) + [self.canvas.lecture.last().last().last().t + .1]
+#    tstamps = map(lambda x: x.t - .1, self.canvas.dc.lecture.slides[1:]) + [self.canvas.dc.lecture.last().last().last().t + .1]
 #    for ts in tstamps:
 #      it = b.builder.get_object('list').append((gobject.TYPE_UINT64, gobject.TYPE_STRING))
 #      b.builder.get_object('list').append(it, 0, ts, 
@@ -377,7 +388,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
       fcd.set_current_name('save.png')
     self.add_png_filters(fcd)
     if fcd.run() == gtk.RESPONSE_ACCEPT:
-      self.exp_png_fun(fcd.get_filename(), (800,600), None)
+      self.exp_png_fun(fcd.get_filename(), (800,600), None) # FIXME (800,600)?
       fcd.destroy()
       return True
     fcd.destroy()
@@ -399,7 +410,29 @@ Draw and record yourself, then play it back for your friends!  What a party tric
       fcd.set_current_name('save.pdf')
     self.add_pdf_filters(fcd)
     if fcd.run() == gtk.RESPONSE_ACCEPT:
-      self.exp_pdf_fun(fcd.get_filename(), (800,600), None)
+      self.exp_pdf_fun(fcd.get_filename(), (800,600), None) # FIXME (800,600)?
+      fcd.destroy()
+      return True
+    fcd.destroy()
+    return False
+
+  def exp_swf(self):
+    if self.exp_swf_fun is None:
+      self.int_err('Export to Flash functionality disabled.')
+      return
+
+    fcd = gtk.FileChooserDialog('Choose a .swf file to export to', None,
+        gtk.FILE_CHOOSER_ACTION_SAVE, (gtk.STOCK_CANCEL, gtk.RESPONSE_CANCEL,
+          gtk.STOCK_SAVE, gtk.RESPONSE_ACCEPT))
+    fcd.set_do_overwrite_confirmation(True)
+    fcd.set_current_folder('saves')
+    if self.last_fname is not None:
+      fcd.set_current_name(self.last_fname[:-4] + '.swf')
+    else:
+      fcd.set_current_name('save.swf')
+    self.add_swf_filters(fcd)
+    if fcd.run() == gtk.RESPONSE_ACCEPT:
+      self.exp_swf_fun(fcd.get_filename())
       fcd.destroy()
       return True
     fcd.destroy()
@@ -492,6 +525,11 @@ Draw and record yourself, then play it back for your friends!  What a party tric
     GUI.add_dc_filters(fcd)
 
   @staticmethod
+  def add_swf_filters(fcd):
+    GUI.add_filter(fcd, ('SWF files', '*.swf'))
+    GUI.add_dc_filters(fcd)
+
+  @staticmethod
   def add_png_filters(fcd):
     GUI.add_filter(fcd, ('PNG files', '*.png'))
     GUI.add_dc_filters(fcd)
@@ -570,6 +608,9 @@ Draw and record yourself, then play it back for your friends!  What a party tric
   def connect_stop(self, fun):
     self['stop'].connect("clicked", lambda w: fun())
     self["playback/stop"].connect("activate", lambda w: fun())
+
+  def connect_exp_swf(self, fun):
+    self.exp_swf_fun = fun
 
   def connect_exp_png(self, fun):
     self.exp_png_fun = fun

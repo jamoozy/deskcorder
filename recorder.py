@@ -73,15 +73,15 @@ def load_wav(fname):
 
 def load(fname, win_sz = (1,1)):
   '''Reads in a file and returns a 2-tuple of lecture an audio.'''
-  if fname.lower().endswith(".dcx"):
-    return _load_dcx(fname, win_sz)
-  elif fname.lower().endswith(".dct"):
-    return _load_dct(fname, win_sz)
-  else:
-    try:
+  try:
+    if fname.lower().endswith(".dcx"):
+      return _load_dcx(fname, win_sz)
+    elif fname.lower().endswith(".dct"):
+      return _load_dct(fname, win_sz)
+    else:
       return _load_dcb(fname, win_sz)
-    except FormatError:
-      return ()
+  except FormatError:
+    return ()
 
 def save(fname, trace = None, audiofiles = [], req_v = DC_REC_VERSION):
   '''Writes out a lecture and set of audio snippets to a file.'''
@@ -169,8 +169,10 @@ def bin_read(f, fmt):
   '''Reads file f using struct to get datatypes shown in fmt.'''
   return struct.unpack(fmt, f.read(struct.calcsize(fmt)))
 
+TMP_HACK = False
+
 def _load_dcb(fname = 'save.dcb', win_sz = (1,1)):
-  '''Loads DCB-v0.1.1'''
+  '''Loads DCB-v0.x.x'''
   f = open(fname, 'rb')
   f_log = open(fname + '.load_log', 'w')
   if f.read(8) != DCB_MAGIC_NUMBER:
@@ -181,6 +183,8 @@ def _load_dcb(fname = 'save.dcb', win_sz = (1,1)):
   f_log.write('version %d.%d.%d\n' % v)
   if v not in DC_VALID_VERSIONS:
     raise VersionError(v)
+
+  print 'File is DCB v%d.%d.%d' % v
 
   if v[0] == 0:
     lec = Lecture()
