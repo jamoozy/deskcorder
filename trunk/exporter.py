@@ -143,6 +143,7 @@ def _to_swf_raw_audio(lecture, audio_data, fname):
 
       #
       # write strokes
+      thickness = 0.01
       shapes = []
       shape_extents = []
       styles = styles[-1:]
@@ -155,9 +156,11 @@ def _to_swf_raw_audio(lecture, audio_data, fname):
           depth_count = 0
         elif type(e) == Stroke:
           styles.append(map(lambda x: int(255*x), (e.r(), e.g(), e.b())))
+          thickness = e.thickness
           last_point = None
         elif type(e) == Point:
-          x, y, p = int(e.x() * dims[0]), int(e.y() * dims[1]), int(dimScale*e.p)
+          x, y = int(e.x() * dims[0]), int(e.y() * dims[1])
+          p = int(dimScale * thickness * e.p)
           if last_point:
             if len(shapes) == 0:
               shapes.append([last_point])
@@ -223,6 +226,7 @@ def _to_swf_no_audio(lecture, fname):
   swfOutput = swf.SWF(fps=250, size=dims, fname=fname)
   lastMessageLength = 0
   nframes = int(math.ceil(dur * SWF_FPS))
+  thickness = 0.01
   for fnum in xrange(0, nframes):
     sys.stdout.write("\x08"*lastMessageLength)
     message = "writing frame %d/%d" % (fnum+1, nframes)
@@ -242,9 +246,11 @@ def _to_swf_no_audio(lecture, fname):
         depth_count = 0
       elif type(e) == Stroke:
         styles.append(map(lambda x: int(255*x), (e.r(), e.g(), e.b())))
+        thickness = e.thickness
         last_point = None
       elif type(e) == Point:
-        x, y, p = int(e.x() * dims[0]), int(e.y() * dims[1]), int(dimScale*e.p)
+        x, y = int(e.x() * dims[0]), int(e.y() * dims[1])
+        p = int(dimScale * thickness * e.p)
         if last_point:
           if len(shapes) == 0:
             shapes.append([last_point])
