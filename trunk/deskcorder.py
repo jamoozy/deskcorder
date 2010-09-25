@@ -345,11 +345,31 @@ class Deskcorder:
 # -------------------------- Testing/Running ------------------------------- #
 ##############################################################################
 
+def print_usage():
+  print
+  print 'Usage: ', sys.argv[0], '[file] [options]'
+  print '  -h --help'
+  print '      Print this usage and exit.'
+  print '  -G --no-gui'
+  print "      Don't use a GUI"
+  print "  -A --no-audio"
+  print "      Don't use audio"
+  print "  --use-gui=[module]"
+  print '      Use a specific GUI module.'
+  print "  --use-audio=[module]"
+  print '      Use a specific audio module.'
+  print '  --exp-swf'
+  print '      Export to a SWF file.  Implies "--no-gui"'
+  print '      Assumes [file] was given.'
+  print
+
 def parse_args(args):
+  export = None
   fname, audio, video = None, None, None
   for arg in args:
     if arg == '-h' or arg == '--help':
-      print 'Usage %s [-A|--no-audio]'
+      print_usage()
+      sys.exit(0)
     elif arg == '-G' or arg == '--no-gui':
       has_gui = False
     elif arg == '-A' or arg == '--no-audio':
@@ -358,16 +378,27 @@ def parse_args(args):
       video = arg[10:]
     elif arg.startswith('--use-audio='):
       audio = arg[12:]
-      pass
+    elif arg == '--exp-swf':
+      export = 'swf'
     else:
       fname = arg
-  return fname, audio, video
+  if export is None:
+    return fname, audio, video
+  else:
+    return (fname, export), None, None
 
 if __name__ == '__main__':
   # valid video modules in preferred order
   VALID_AV_MODULES = ['linux', 'mac', 'qt', 'dummy']
 
   fname, audio, video = parse_args(sys.argv[1:])
+  if type(fname) == tuple:
+    if fname[1] == 'swf':
+      lec, a = recorder.load(fname[0])
+      exporter.to_swf(lec, a, fname[0][:-4] + '.swf')
+    else:
+      print 'Unknown flag "--exp-%s"' % fname[1]
+    sys.exit(0)
 
   if audio is not None:
     try:
