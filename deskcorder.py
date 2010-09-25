@@ -208,20 +208,15 @@ class Deskcorder:
     #     out of audio, return false (stop calling this function).
     for e in self.it.next(self.progress):
       if type(e) == Slide:
-        print 'Slide: clear()'
         self.gui.canvas.clear()
       elif type(e) == Stroke:
-        print 'Stroke: start & store'
         self.last_point = None
         self.stroke = e
       elif type(e) == Point:
-        print 'point'
         if self.last_point is None:
-          print '  -> draw(p)'
           self.gui.canvas.draw(self.stroke.color,
               self.stroke.thickness * e.p, e.pos)
         else:
-          print '  -> draw(p1,p2)'
           self.gui.canvas.draw(self.stroke.color,
               self.stroke.thickness * e.p, self.last_point.pos, e.pos)
         self.last_point = e

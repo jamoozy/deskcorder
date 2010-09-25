@@ -36,14 +36,16 @@ def _draw_to_png(fname, slide, size = (400,300), ts = None):
 ##############################################################################
 
 def to_pdf(trace, ofname, size = (400,300), times = None):
-  print 'to_pdf()'
   surface = cairo.PDFSurface("%s.pdf" % ofname, size[0], size[1])
   ctx = cairo.Context(surface)
   if times is None:
+    print 'Writing 1 PDF page'
     for slide in trace.slides:
       _draw_slide_on_surface(ctx, slide, size)
       ctx.show_page()
   else:
+    print 'Writing %d PDF %s' % \
+        (len(times), 'pages' if len(times) > 1 else 'page')
     for ts in times:
       assigned = False
       print 'finding slide for t:%.0f' % ts
@@ -208,7 +210,6 @@ def _to_swf_raw_audio(lecture, audio_data, fname):
       swfOutput.newFrame()
       prog += 1./SWF_FPS
   swfOutput.close()
-  print
 
 def _to_swf_no_audio(lecture, fname):
   it = iter(lecture)
@@ -295,7 +296,6 @@ def _to_swf_no_audio(lecture, fname):
           ))
     swfOutput.newFrame()
   swfOutput.close()
-  print
 
 def to_swf(lecture, audio_data, fname):
   if len(audio_data) > 0:

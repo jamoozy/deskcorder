@@ -81,6 +81,7 @@ class Canvas(gtk.DrawingArea):
 
   def draw_to_ttpt(self):
     stroke = None
+    i = 0  # 1st slide (default)
     for i in xrange(len(self.dc.lecture)-1):
       if self.dc.lecture[i].t < self.ttpt and self.ttpt < self.dc.lecture[i+1]:
         stroke = self.dc.lecture[i]
