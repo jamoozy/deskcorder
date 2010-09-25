@@ -60,21 +60,44 @@
                       </object>
                     </child>
                     <child>
-                      <object class="GtkImageMenuItem" id="file/exp-pdf">
-                        <property name="label" translatable="yes">Export to PDF...</property>
+                      <object class="GtkImageMenuItem" id="file/export">
+                        <property name="label" translatable="yes">Export...</property>
                         <property name="visible">True</property>
-                        <property name="image">image1</property>
+                        <property name="image">image4</property>
                         <property name="use_stock">False</property>
-                        <accelerator key="e" signal="activate" modifiers="GDK_CONTROL_MASK"/>
-                      </object>
-                    </child>
-                    <child>
-                      <object class="GtkImageMenuItem" id="file/exp-png">
-                        <property name="label" translatable="yes">Export to PNG...</property>
-                        <property name="visible">True</property>
-                        <property name="image">image2</property>
-                        <property name="use_stock">False</property>
-                        <accelerator key="e" signal="activate" modifiers="GDK_SHIFT_MASK | GDK_CONTROL_MASK"/>
+                        <child type="submenu">
+                          <object class="GtkMenu" id="export-menu">
+                            <property name="visible">True</property>
+                            <child>
+                              <object class="GtkImageMenuItem" id="file/export/pdf">
+                                <property name="label" translatable="yes">to PDF...</property>
+                                <property name="visible">True</property>
+                                <property name="image">image1</property>
+                                <property name="use_stock">False</property>
+                                <accelerator key="e" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkImageMenuItem" id="file/export/png">
+                                <property name="label" translatable="yes">to PNG...</property>
+                                <property name="visible">True</property>
+                                <property name="sensitive">False</property>
+                                <property name="image">image2</property>
+                                <property name="use_stock">False</property>
+                                <accelerator key="e" signal="activate" modifiers="GDK_SHIFT_MASK | GDK_CONTROL_MASK"/>
+                              </object>
+                            </child>
+                            <child>
+                              <object class="GtkImageMenuItem" id="file/export/swf">
+                                <property name="label" translatable="yes">to Flash...</property>
+                                <property name="visible">True</property>
+                                <property name="image">image3</property>
+                                <property name="use_stock">False</property>
+                                <accelerator key="f" signal="activate" modifiers="GDK_CONTROL_MASK"/>
+                              </object>
+                            </child>
+                          </object>
+                        </child>
                       </object>
                     </child>
                     <child>
@@ -638,14 +661,6 @@
       </object>
     </child>
   </object>
-  <object class="GtkImage" id="image1">
-    <property name="visible">True</property>
-    <property name="stock">gtk-missing-image</property>
-  </object>
-  <object class="GtkImage" id="image2">
-    <property name="visible">True</property>
-    <property name="stock">gtk-missing-image</property>
-  </object>
   <object class="GtkImage" id="img/small">
     <property name="visible">True</property>
     <property name="pixbuf">icons/smallstroke.png</property>
@@ -711,5 +726,21 @@
   <object class="GtkToggleAction" id="await-action">
     <property name="label">Wait for Audio</property>
     <property name="short_label">A-wait</property>
+  </object>
+  <object class="GtkImage" id="image2">
+    <property name="visible">True</property>
+    <property name="stock">gtk-missing-image</property>
+  </object>
+  <object class="GtkImage" id="image3">
+    <property name="visible">True</property>
+    <property name="stock">gtk-file</property>
+  </object>
+  <object class="GtkImage" id="image1">
+    <property name="visible">True</property>
+    <property name="stock">gtk-dnd</property>
+  </object>
+  <object class="GtkImage" id="image4">
+    <property name="visible">True</property>
+    <property name="stock">gtk-convert</property>
   </object>
 </interface>

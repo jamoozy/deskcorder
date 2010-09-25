@@ -1,4 +1,4 @@
-import deskcorder as dc
+from datatypes import *
 import recorder
 import swfOutput as swf
 #import linux # XXX not liking this ... should be agnostic
@@ -73,16 +73,16 @@ def swfExportWithMP3(lecture, audio_data, fname):
       shape_extents = []
       styles = styles[-1:]
       for e in it.next(prog):
-        if type(e) == dc.Slide:
+        if type(e) == Slide:
           styles = []
           shapes = []
           for i in xrange(depth_count):
             swfOutput.append(swf.RemoveObject2(i+1))
           depth_count = 0
-        elif type(e) == dc.Stroke:
+        elif type(e) == Stroke:
           styles.append(map(lambda x: int(255*x), (e.r(), e.g(), e.b())))
           last_point = None
-        elif type(e) == dc.Point:
+        elif type(e) == Point:
           x, y, p = int(e.x() * dims[0]), int(e.y() * dims[1]), int(dimScale*e.p)
           if last_point:
             if len(shapes) == 0:
@@ -140,7 +140,7 @@ def swfExportWithMP3(lecture, audio_data, fname):
   swfOutput.close()
   print
 
-def swfExportWithAudio(lecture, audio_data, fname):
+def swfExportWithRawAudio(lecture, audio_data, fname):
   it = iter(lecture)
   first_ts = lecture.get_time_of_first_event()
   last_ts = lecture.get_time_of_last_event()
@@ -181,16 +181,16 @@ def swfExportWithAudio(lecture, audio_data, fname):
       shape_extents = []
       styles = styles[-1:]
       for e in it.next(prog):
-        if type(e) == dc.Slide:
+        if type(e) == Slide:
           styles = []
           shapes = []
           for i in xrange(depth_count):
             swfOutput.append(swf.RemoveObject2(i+1))
           depth_count = 0
-        elif type(e) == dc.Stroke:
+        elif type(e) == Stroke:
           styles.append(map(lambda x: int(255*x), (e.r(), e.g(), e.b())))
           last_point = None
-        elif type(e) == dc.Point:
+        elif type(e) == Point:
           x, y, p = int(e.x() * dims[0]), int(e.y() * dims[1]), int(dimScale*e.p)
           if last_point:
             if len(shapes) == 0:
@@ -269,16 +269,16 @@ def swfExportNoAudio(lecture, fname):
     prog = fnum / (float(SWF_FPS))
     styles = styles[-1:]
     for e in it.next(prog):
-      if type(e) == dc.Slide:
+      if type(e) == Slide:
         styles = []
         shapes = []
         for i in xrange(depth_count):
           swfOutput.append(swf.RemoveObject2(i+1))
         depth_count = 0
-      elif type(e) == dc.Stroke:
+      elif type(e) == Stroke:
         styles.append(map(lambda x: int(255*x), (e.r(), e.g(), e.b())))
         last_point = None
-      elif type(e) == dc.Point:
+      elif type(e) == Point:
         x, y, p = int(e.x() * dims[0]), int(e.y() * dims[1]), int(dimScale*e.p)
         if last_point:
           if len(shapes) == 0:
@@ -338,7 +338,7 @@ def swfConvert(fname, outname):
 #  audio = linux.Audio()
 #  audio.load_data(a_data)
 #  return swfExportWithMP3(lecture, a_data, outname)
-  return swfExportWithAudio(lecture, a_data, outname)
+  return swfExportWithRawAudio(lecture, a_data, outname)
 #  return swfExportNoAudio(lecture, outname)
 
 if __name__ == "__main__":

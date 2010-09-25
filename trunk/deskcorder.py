@@ -27,7 +27,7 @@ class Deskcorder:
     self.lecture = Lecture(time.time())
 
     self.audio = Audio()
-    self.gui = GUI(self.lecture)
+    self.gui = GUI(self)
 
     self.gui.connect_new(self.reset)
     self.gui.connect_play(self.play)
@@ -40,6 +40,7 @@ class Deskcorder:
     self.gui.connect_progress_moved(self.move_progress)
     self.gui.connect_exp_png(self.exp_png)
     self.gui.connect_exp_pdf(self.exp_pdf)
+    self.gui.connect_exp_swf(self.exp_swf)
 
     if not audio_enabled: print 'Audio disabled'
     if not gui_enabled: print 'GUI disabled'
@@ -58,25 +59,7 @@ class Deskcorder:
     self.progress = val
     self.audio.set_progress(val + self.earliest_event_time())
     self.gui.canvas.ttpt = val + self.earliest_event_time()
-    self.reset_iters_to_progress()
-
-  def reset_iters_to_progress(self):
-    self.slide_i = 0
-    self.stroke_i = 0
-    self.point_i = 0
-
-    if self.lecture.is_empty(): return
-
-    ttpt = self.progress + self.earliest_event_time()
-    for i in xrange(1,len(self.gui.canvas.lecture)):
-      if self.gui.canvas.lecture[i].t > ttpt:
-        self.slide_i = i - 1
-        while not self.play_iters_valid():
-          continue
-        return
-
-    self.slide_i = len(self.gui.canvas.lecture) - 1
-    self.play_iters_valid() # makes sure they are, if they can be.
+    self.it.seek(self.progress)
 
   def get_duration(self):
     start_t = self.earliest_event_time()
@@ -84,7 +67,7 @@ class Deskcorder:
     return (end_t - start_t) if start_t >= 0 and end_t >= 0 else .0
 
   def earliest_event_time(self):
-    video_t = self.gui.canvas.lecture.get_time_of_first_event()
+    video_t = self.lecture.get_time_of_first_event()
     audio_t = self.audio.get_time_of_first_event()
     if audio_t >= 0 and video_t >= 0:
       return min(audio_t, video_t)
@@ -94,7 +77,7 @@ class Deskcorder:
       return audio_t
 
   def latest_event_time(self):
-    video_t = self.gui.canvas.lecture.get_time_of_last_event()
+    video_t = self.lecture.get_time_of_last_event()
     audio_t = self.audio.get_time_of_last_event()
     return max(audio_t, video_t) if video_t >= 0 else audio_t
 
@@ -167,13 +150,9 @@ class Deskcorder:
     now = time.time()
 
     self.gui.canvas.freeze()
-    self.lecture = self.gui.canvas.lecture
 
     # Playback iterators.
-    self.slide_i = 0
-    self.stroke_i = 0
-    self.point_i = 0
-    self.video_done = False
+    self.it = iter(self.lecture)
 
     # prev & curr time play_tick() was called and progress in seconds.
     self.play_time = now
@@ -181,7 +160,8 @@ class Deskcorder:
     self.curr_now = self.prev_now
     self.progress = 0
 
-    self.gui.canvas.clear() # XXX hack to clear initially for GTK+ version
+    self.gui.canvas.clear()  # FIXME hack because I don't get the first slide
+                             #       from the Lecture.Iterator object.
     self.gui.timeout_add(50, self.play_tick)
 
   def play_tick(self):
@@ -189,13 +169,10 @@ class Deskcorder:
     program.'''
 
     if not self.is_playing():
-      #print 'Not playing'
       return False
     if self.is_paused():
-      #print 'Paused'
       return True
     if self.get_duration() <= 0:
-      #print 'Empty'
       return False
 
     # "normal" update
@@ -223,75 +200,36 @@ class Deskcorder:
     #print 'prog:%.1fs' % self.progress
 
     # I'm simulating a do-while loop here.  This one is basically:
-    #  1. While we still have stuff to iterate over, iterate.
-    #  2. While the thing our iterator is pointing at is still old enough to
-    #     draw, draw it.
-    #  3. When we can't draw any more because the point our iterator is
-    #     pointed at is too old, return True (run the function again later).
-    #  4. When out iterator goes past the end of the lecture object, return
-    #     false (stop calling this function).
-    while not self.video_done and self.play_iters_valid():
-      slide = self.lecture[self.slide_i]
-      # if we are after the slide's clear time but are still on the first point
-      # of its first stroke, then clear the canvas.
-      if slide.t <= ttpt and self.point_i == 0 and self.stroke_i == 0:
+    #  1. Get all the objects up to self.progress.
+    #     a. for each slide, clear the screen,
+    #     b. for each stroke, start drawing a new stroke
+    #     c. for each point, draw the point.
+    #  2. When out iterator goes past the end of the lecture object and we're
+    #     out of audio, return false (stop calling this function).
+    for e in self.it.next(self.progress):
+      if type(e) == Slide:
+        print 'Slide: clear()'
         self.gui.canvas.clear()
-
-      stroke = slide[self.stroke_i]
-      if len(stroke) > 0:
-        point = stroke[self.point_i]
-        if point.t <= ttpt:
-          if self.point_i > 1:
-            self.gui.canvas.draw(stroke.color, stroke.thickness * point.p,
-                stroke[self.point_i-2].pos,
-                stroke[self.point_i-1].pos,
-                stroke[self.point_i].pos)
-          elif self.point_i > 0:
-            self.gui.canvas.draw(stroke.color, stroke.thickness * point.p,
-                stroke[self.point_i-1].pos,
-                stroke[self.point_i].pos)
-          else:
-            self.gui.canvas.draw(stroke.color, stroke.thickness * point.p,
-                stroke[self.point_i].pos)
+      elif type(e) == Stroke:
+        print 'Stroke: start & store'
+        self.last_point = None
+        self.stroke = e
+      elif type(e) == Point:
+        print 'point'
+        if self.last_point is None:
+          print '  -> draw(p)'
+          self.gui.canvas.draw(self.stroke.color,
+              self.stroke.thickness * e.p, e.pos)
         else:
-          return True
+          print '  -> draw(p1,p2)'
+          self.gui.canvas.draw(self.stroke.color,
+              self.stroke.thickness * e.p, self.last_point.pos, e.pos)
+        self.last_point = e
 
-      if not self.play_iters_inc() and a_time < 0:
-        self.stop()
-        return False
+    if not self.it.has_next() and a_time < 0:
+      self.stop()
+      return False
     return self.check_done()
-
-  def play_iters_valid(self):
-    if self.slide_i < len(self.lecture):
-      if self.stroke_i < len(self.lecture[self.slide_i]):
-        if self.point_i < len(self.lecture[self.slide_i][self.stroke_i]):
-          return True
-    return self.play_iters_inc()
-
-  def play_iters_inc(self):
-    '''Increments all the iterators that have to do with the playing
-    process.'''
-    if len(self.lecture) > 0:
-      if len(self.lecture[self.slide_i]) > 0:
-        self.point_i += 1
-        if self.point_i < len(self.lecture[self.slide_i][self.stroke_i]):
-          return self.play_iters_valid()
-        self.point_i = 0
-
-        self.stroke_i += 1
-        if self.stroke_i < len(self.lecture[self.slide_i]):
-          return self.play_iters_valid()
-        self.stroke_i = 0
-
-      self.slide_i += 1
-      if self.slide_i < len(self.lecture):
-        return self.play_iters_valid()
-
-    self.slide_i = 0
-    self.stroke_i = 0
-    self.point_i = 0
-    self.video_done = True
-    return False
 
   def pause(self, checked):
     '''Pauses playback and audio recording.'''
@@ -374,28 +312,31 @@ class Deskcorder:
 
   def exp_png(self, fname, size, times):
     if fname.lower().endswith('.png'):
-      exporter.to_png(self.gui.canvas.lecture, fname[:-4], size, times)
+      exporter.to_png(self.lecture, fname[:-4], size, times)
     else:
-      exporter.to_png(self.gui.canvas.lecture, fname, size, times)
+      exporter.to_png(self.lecture, fname, size, times)
 
   def exp_pdf(self, fname, size, times):
     if fname.lower().endswith('.pdf'):
-      exporter.to_pdf(self.gui.canvas.lecture, fname[:-4], size, times)
+      exporter.to_pdf(self.lecture, fname[:-4], size, times)
     else:
-      exporter.to_pdf(self.gui.canvas.lecture, fname, size, times)
+      exporter.to_pdf(self.lecture, fname, size, times)
+
+  def exp_swf(self, fname):
+    exporter.to_swf(self.lecture, self.audio.make_data(), fname)
 
   def save(self, fname = 'save.dcb'):
     if self.is_recording():
       self.record(False)
-    recorder.save(fname, self.gui.canvas.lecture, self.audio.make_data())
+    recorder.save(fname, self.lecture, self.audio.make_data())
     self.gui.canvas.dirty = False
 
   def load(self, fname = 'save.dcb'):
     try:
       rtn = recorder.load(fname)
       if len(rtn) > 0:
-        self.gui.canvas.lecture, a = recorder.load(fname)
-        self.audio.load_data(a)
+        self.lecture = rtn[0]
+        self.audio.load_data(rtn[1])
         self.gui.canvas.dirty = False
         self.gui.set_fname(fname)
         return True
