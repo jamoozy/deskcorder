@@ -113,8 +113,13 @@ class Canvas(gtk.DrawingArea):
     self.refresh()
 
   def get_pressure_or_default(self, device, default = None):
-    state = device.get_state(self.window)
-    p = device.get_axis(state[0], gtk.gdk.AXIS_PRESSURE)
+    pressures = [dev.get_axis(dev.get_state(self.window)[0], gtk.gdk.AXIS_PRESSURE) for dev in gtk.gdk.devices_list()]
+    p = max([0.0] + [i for i in pressures if i is not None])
+    if p < 1e-5:
+      p = None
+#    state = device.get_state(self.window)
+#    p = device.get_axis(state[0], gtk.gdk.AXIS_PRESSURE)
+#    print p
     return default if default is not None and p is None else p
 
   def gtk_button_press(self, widget, event):

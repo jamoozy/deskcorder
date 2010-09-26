@@ -10,6 +10,7 @@ import subprocess
 def _draw_slide_on_surface(ctx, slide, scale = (400,300), ts = None):
   ctx.set_line_cap(cairo.LINE_CAP_ROUND)
   for stroke in slide.strokes:
+    if len(stroke.points) <= 0: continue
     ctx.set_source_rgb(stroke.r(), stroke.g(), stroke.b())
     ctx.move_to(stroke.first().x() * scale[0], stroke.first().y() * scale[1])
     diag_scale = math.sqrt(scale[0]**2 + scale[1]**2)
@@ -84,19 +85,6 @@ def to_png(trace, ofname, size = (400,300), times = None):
       if not assigned:
         _draw_to_png("%s-%03d.png" % (ofname,slideidx), trace[i], size, ts)
       slideidx += 1
-
-def _load_from_file(fname):
-  f = open(fname, 'r')
-  times = []
-  try:
-    while True:
-      line = f.next().strip()
-      times.append(int(line[:-3]) * 60 + int(line[-2:]))
-  except StopIteration:
-    pass
-  finally:
-    f.close()
-  return times
 
 
 
@@ -312,6 +300,25 @@ def to_swf(lecture, audio_data, fname):
     _to_swf_raw_audio(lecture, audio_data, fname)
   else:
     _to_swf_no_audio(lecture, fname)
+
+
+
+##############################################################################
+# -------------------------------- Testing --------------------------------- #
+##############################################################################
+
+def _load_from_file(fname):
+  f = open(fname, 'r')
+  times = []
+  try:
+    while True:
+      line = f.next().strip()
+      times.append(int(line[:-3]) * 60 + int(line[-2:]))
+  except StopIteration:
+    pass
+  finally:
+    f.close()
+  return times
 
 if __name__ == "__main__":
   import sys, recorder
