@@ -99,7 +99,7 @@ def _to_swf_raw_audio(lecture, audio_data, fname):
   first_ts = lecture.get_time_of_first_event()
   last_ts = lecture.get_time_of_last_event()
   dur = last_ts - first_ts
-  dims = (640*20,480*20) ; dimScale = 0.5 * (dims[0]**2 + dims[1]**2)**0.5
+  dims = (640*20,480*20) ; dimScale = 0.25 * (dims[0]**2 + dims[1]**2)**0.5
   styles = []
   obj_count = 0
   depth_count = 0
@@ -209,7 +209,7 @@ def _to_swf_no_audio(lecture, fname):
   first_ts = lecture.get_time_of_first_event()
   last_ts = lecture.get_time_of_last_event()
   dur = last_ts - first_ts
-  dims = (640*20,480*20) ; dimScale = 0.5 * (dims[0]**2 + dims[1]**2)**0.5
+  dims = (640*20,480*20) ; dimScale = 0.25 * (dims[0]**2 + dims[1]**2)**0.5
   styles = []
   obj_count = 0
   depth_count = 0
