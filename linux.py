@@ -223,10 +223,10 @@ class Canvas(gtk.DrawingArea):
       self.raster_cr.line_to(pos2[0], pos2[1])
       self.raster_cr.stroke()
       reg.union_with_rect((
-            min(int(pos1[0] - 0.5*r), int(pos2[0] - 0.5*r)),
-            min(int(pos1[1] - 0.5*r), int(pos2[1] - 0.5*r)),
-            int(abs(pos1[0] - pos2[0]) + r),
-            int(abs(pos1[1] - pos2[1]) + r)))
+            min(int(pos1[0] - r), int(pos2[0] - r)),
+            min(int(pos1[1] - r), int(pos2[1] - r)),
+            int(abs(pos1[0] - pos2[0]) + 2*r),
+            int(abs(pos1[1] - pos2[1]) + 2*r)))
     else:
       self.raster_cr.set_line_width(r)
       self.raster_cr.set_line_join(cairo.LINE_JOIN_MITER)
@@ -236,15 +236,15 @@ class Canvas(gtk.DrawingArea):
       self.raster_cr.line_to(pos3[0], pos3[1])
       self.raster_cr.stroke()
       reg.union_with_rect((
-            min(int(pos1[0] - 0.5*r), int(pos2[0] - 0.5*r)),
-            min(int(pos1[1] - 0.5*r), int(pos2[1] - 0.5*r)),
-            int(abs(pos1[0] - pos2[0]) + r),
-            int(abs(pos1[1] - pos2[1]) + r)))
+            min(int(pos1[0] - r), int(pos2[0] - r)),
+            min(int(pos1[1] - r), int(pos2[1] - r)),
+            int(abs(pos1[0] - pos2[0]) + 2*r),
+            int(abs(pos1[1] - pos2[1]) + 2*r)))
       reg.union_with_rect((
-            min(int(pos2[0] - 0.5*r), int(pos3[0] - 0.5*r)),
-            min(int(pos2[1] - 0.5*r), int(pos3[1] - 0.5*r)),
-            int(abs(pos2[0] - pos3[0]) + r),
-            int(abs(pos2[1] - pos3[1]) + r)))
+            min(int(pos2[0] - r), int(pos3[0] - r)),
+            min(int(pos2[1] - r), int(pos3[1] - r)),
+            int(abs(pos2[0] - pos3[0]) + 2*r),
+            int(abs(pos2[1] - pos3[1]) + 2*r)))
     self.window.invalidate_region(reg, False)
 
 class ExportDialog(gtk.Dialog):
