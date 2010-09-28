@@ -519,7 +519,8 @@ Draw and record yourself, then play it back for your friends!  What a party tric
 
   @staticmethod
   def add_dc_filters(fcd):
-    GUI.add_filter(fcd, ("DC binary", "*.dcb"))
+    GUI.add_filter(fcd, ("DC archive", "*.dar"))
+    GUI.add_filter(fcd, ("DC binary (deprecated)", "*.dcb"))
     GUI.add_filter(fcd, ("DC XML", "*.dcx"))
     GUI.add_filter(fcd, ("DC text", "*.dct"))
     GUI.add_filter(fcd, ("All DC Files", "*.dc[bxt]"))

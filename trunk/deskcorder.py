@@ -17,7 +17,7 @@ import exporter
 # ---------------------------- Main Object ------------------------------- #
 ############################################################################
 
-class Deskcorder:
+class Main:
   def __init__(self, gui_enabled=True, audio_enabled=True):
     # Playback variables.
     self.play_time = None
@@ -91,15 +91,26 @@ class Deskcorder:
       self.audio.reset()
       self.stop()
 
-  def run(self, fname = None):
+  def load_config(self, config):
+    self.config = config
+    if config is None: return
+
+    print 'Loading from "%s"' % config.config_dir
+
+    if os.path.isdir(config.lecture_dir):
+      self.gui.ask_recover()
+
+    if config.file_to_load is not None and config.file_to_load is not False:
+      try:
+        self.load(config.file_to_load)
+      except IOError as e:
+        print 'Could not load file, %s: %s"' % (fname, str(e))
+
+
+  def run(self, config = None):
     '''Runs the program.'''
     self.gui.init()
-    if fname is not None:
-      try:
-        self.load(fname)
-      except IOError as e:
-        print 'Could not load file, %s: %s"' % (fname, e.message)
-
+    self.load_config(config)
     try:
       self.gui.run()
     except KeyboardInterrupt:
@@ -123,7 +134,8 @@ class Deskcorder:
 
   def is_playing(self):
     '''Determines if this is playing or not.'''
-    return self.progress >= 0 and self.progress <= self.get_duration()
+    # FIXME Adding one at the end is the same hack as below (in play_tick()).
+    return self.progress >= 0 and self.progress <= self.get_duration() + 1
 
   def play(self, active):
     '''Start/stop playing what's in this file.'''
@@ -165,7 +177,7 @@ class Deskcorder:
     self.gui.timeout_add(50, self.play_tick)
 
   def play_tick(self):
-    '''Do one 'tick' in the process of playing back what's stored in this
+    '''Do one "tick" in the process of playing back what's stored in this
     program.'''
 
     if not self.is_playing():
@@ -193,11 +205,12 @@ class Deskcorder:
     else:
       a_time = -1
 
-    # updating GUI
+    # updating GUI slider bar
     self.gui.progress_slider_value(self.progress / self.get_duration())
-    ttpt = self.progress + self.earliest_event_time()
-    self.gui.canvas.ttpt = ttpt
-    #print 'prog:%.1fs' % self.progress
+    self.gui.canvas.ttpt = self.progress + self.earliest_event_time()
+
+    # FIXME hack: I'm fixing the symptom, not the cause, here ...
+    self.progress += 1
 
     # I'm simulating a do-while loop here.  This one is basically:
     #  1. Get all the objects up to self.progress.
@@ -247,6 +260,7 @@ class Deskcorder:
       self.gui.pause_pressed(False)
 
   def is_paused(self):
+    '''Determines if playback is paused.'''
     return self.last_pause is not None
 
   def done(self):
@@ -262,6 +276,7 @@ class Deskcorder:
     return True
 
   def stop(self):
+    '''Stops playback and recording.'''
     if self.is_paused():
       self.pause(time.time())
     self.audio.stop()
@@ -274,6 +289,7 @@ class Deskcorder:
     self.progress = -1
 
   def fmt_progress(self, val):
+    '''Called by the GUI upon a request to redraw the progress label.'''
     dur = self.get_duration()
     total = '%d:%02d' % (dur / 60, math.ceil(dur % 60))
     if self.is_empty():
@@ -286,6 +302,8 @@ class Deskcorder:
       return '0:00 / %s' % total
 
   def move_progress(self, val):
+    '''Called by the GUI when the progress bar has been moved (usually by a
+    mouse drag).'''
     if self.is_empty():
       self.all_buttons_off()
       # Can't set progress here, because may be in reaction to a mouse click,
@@ -298,6 +316,7 @@ class Deskcorder:
       self.gui.play_pressed(True)
       self.gui.pause_pressed(True)
       self.set_progress(val * self.get_duration())
+      self.gui.redraw()
 
 
 
@@ -345,93 +364,204 @@ class Deskcorder:
 # -------------------------- Testing/Running ------------------------------- #
 ##############################################################################
 
-def print_usage():
-  print
-  print 'Usage: ', sys.argv[0], '[file] [options]'
-  print '  -h --help'
-  print '      Print this usage and exit.'
-  print '  -G --no-gui'
-  print "      Don't use a GUI"
-  print "  -A --no-audio"
-  print "      Don't use audio"
-  print "  --use-gui=[module]"
-  print '      Use a specific GUI module.'
-  print "  --use-audio=[module]"
-  print '      Use a specific audio module.'
-  print '  --exp-swf'
-  print '      Export to a SWF file.  Implies "--no-gui"'
-  print '      Assumes [file] was given.'
-  print
+class Configuration:
+  '''Represents a configuration of Deskcorder.  This takes all things into
+  account, including the configuration files, the OS, and command-line
+  parameters.'''
 
-def parse_args(args):
-  export = None
-  fname, audio, video = None, None, None
-  for arg in args:
-    if arg == '-h' or arg == '--help':
-      print_usage()
-      sys.exit(0)
-    elif arg == '-G' or arg == '--no-gui':
-      has_gui = False
-    elif arg == '-A' or arg == '--no-audio':
-      audio = 'dummy'
-    elif arg.startswith('--use-gui='):
-      video = arg[10:]
-    elif arg.startswith('--use-audio='):
-      audio = arg[12:]
-    elif arg == '--exp-swf':
-      export = 'swf'
-    else:
-      fname = arg
-  if export is None:
-    return fname, audio, video
-  else:
-    return (fname, export), None, None
-
-if __name__ == '__main__':
   # valid video modules in preferred order
   VALID_AV_MODULES = ['linux', 'mac', 'qt', 'dummy']
 
-  fname, audio, video = parse_args(sys.argv[1:])
-  if type(fname) == tuple:
-    if fname[1] == 'swf':
+  def __init__(self, config_dir = None):
+    # platform-agnostic options
+    self.help_req = False
+    self.export_fmt = None
+    self.file_to_load = False
+    self._load_defaults(config_dir)
+    self._load_config(self.config_file)
+
+  def _load_defaults(self, config_dir):
+    '''Loads the platform-dependent default configuration.'''
+    # platform-dependent options
+    if os.name == 'posix':
+      self.gui_module = 'linux'
+      self.audio_module = 'linux'
+      self.config_dir = os.path.expanduser('~/.deskcorder' if config_dir is None else config_dir)
+      self.config_file = self.config_dir + '/config'
+      self.lecture_dir = self.config_dir + '/session'
+    elif os.name == 'nt':
+      print 'Warning: NT varieties of Windows not yet supported.'
+    elif os.name == 'os2':
+      print 'Warning: Mac OS not yet supported.'
+    elif os.name == 'ce':
+      print 'Warning: CE varieties of Windows not yet supported.'
+    elif os.name == 'riscos':
+      print 'Warning: I have no idea what RiscOS is ...'
+    else:
+      print 'Warning: unhandled OS type:', os.name
+      self.gui_module = None
+      self.audio_module = None
+      self.config_dir = None
+      self.config_file = None
+      self.lecture_dir = None
+
+  def _load_config(self, cfile):
+    '''Loads the configuration in 'cfile'.'''
+    # If cfile DNE,
+    if not os.path.exists(cfile):
+      # If cdir exists
+      if os.path.exists(os.path.dirname(cfile)):
+        # If cdir is a directory
+        if os.path.isdir(os.path.dirname(cfile)):
+          # Create an empty cfile.
+          open(cfile, 'w').close()
+        # If cdir is is a file
+        else:
+          # Move it to a temp file
+          tmp = tempfile.mktemp()
+          os.rename(os.path.dirname(cfile), tmp)
+          # Create the directory
+          os.mkdir(os.path.dirname(cfile))
+          # Move the temp file to cfile
+          os.rename(tmp, cfile)
+      else:
+        os.mkdir(os.path.dirname(cfile))
+        open(cfile, 'w').close()
+
+    fp = file(cfile, 'r')
+    try:
+      while True:
+        line = fp.next().strip()
+        if line.startswith("#"): continue
+        if line.startswith("default_format"):
+          pass  # TODO write me
+    except StopIteration:
+      pass
+
+
+  def load_file(self, fname = None):
+    '''Register the file to load with the configuration.  Assume that if a
+    file name has already been given, the new "file" is actually a bad
+    command line argument.  If fname is None, assume that the caller wants
+    to know what the file name is.'''
+    if fname is None:
+      return self.file_to_load
+    elif self.file_to_load != False:
+      print 'Warning: unrecognized command line argument:', fname
+    else:
+      self.file_to_load = fname
+
+  def help(self):
+    self.help_req = True
+
+  def export(self, exp):
+    self.export_fmt = exp
+
+  def audio(self, module = None):
+    if module is None:
+      return self.audio_module
+    else:
+      self.audio_module = module
+
+  def gui(self, module = None):
+    if module is None:
+      return self.gui_module
+    else:
+      self.gui_module = module
+
+  @staticmethod
+  def print_usage():
+    print
+    print 'Usage: ', sys.argv[0], '[file] [options]'
+    print '  -h --help'
+    print '      Print this usage and exit.'
+    print '  -G --no-gui'
+    print "      Don't use a GUI"
+    print "  -A --no-audio"
+    print "      Don't use audio"
+    print "  --use-gui=[module]"
+    print '      Use a specific GUI module.'
+    print "  --use-audio=[module]"
+    print '      Use a specific audio module.'
+    print '  --exp-swf'
+    print '      Export to a SWF file.  Implies "--no-gui"'
+    print '      Assumes [file] was given.'
+    print
+
+def parse_args(args):
+  config = Configuration()
+  for arg in args:
+    if arg == '-h' or arg == '--help':
+      config.help()
+    elif arg == '-G' or arg == '--no-gui':
+      config.gui(False)
+    elif arg == '-A' or arg == '--no-audio':
+      config.audio(False)
+    elif arg.startswith('--use-gui='):
+      config.gui(arg[10:])
+    elif arg.startswith('--use-audio='):
+      config.audio(arg[12:])
+    elif arg == '--exp-pdf':
+      config.export('pdf')
+    elif arg == '--exp-swf':
+      config.export('swf')
+    else:
+      fname = arg
+  return config
+
+if __name__ == '__main__':
+
+  config = parse_args(sys.argv[1:])
+
+  if config.help_req:
+    Configuration.print_usage()
+    sys.exit(0)
+
+  if config.export_fmt is not None:
+    if config.export_fmt == 'swf':
       lec, a = recorder.load(fname[0])
       exporter.to_swf(lec, a, fname[0][:-4] + '.swf')
+    elif config.export_fmt == 'pdf':
+      lec, a = recorder.load(fname[0])
+      exporter.to_pdf(lec, fname[0][:-4] + '.swf')
     else:
       print 'Unknown flag "--exp-%s"' % fname[1]
     sys.exit(0)
 
-  if audio is not None:
+  # Something was passed, so use that to 
+  if config.audio_module is not None:
     try:
-      Audio = __import__(audio).Audio
+      Audio = __import__(config.audio_module).Audio
     except AttributeError:
-      audio = None
-      print 'audio module "%s" not found' % audio
+      config.audio_module = None
+      print 'audio module "%s" not found' % config.audio_module
 
-  if audio is None:
-    for a in VALID_AV_MODULES:
+  if config.audio_module is None:
+    for a in Configuration.VALID_AV_MODULES:
       try:
         Audio = __import__(a).Audio
-        audio = a
+        config.audio_module = a
         break
       except AttributeError:
         pass
 
-  if video is not None:
+  if config.gui_module is not None:
     try:
-      Canvas = __import__(video).Canvas
-      GUI = __import__(video).GUI
+      Canvas = __import__(config.gui_module).Canvas
+      GUI = __import__(config.gui_module).GUI
     except AttributeError:
-      video = None
-      print 'video module "%s" not found' % video
+      config.gui_module = None
+      print 'video module "%s" not found' % config.gui_module
 
-  if video is None:
-    for v in VALID_AV_MODULES:
+  if config.gui_module is None:
+    for v in Configuration.VALID_AV_MODULES:
       try:
         GUI = __import__(v).GUI
-        video = v
+        config.gui_module = v
         break
       except AttributeError:
         pass
 
-  print 'using %s audio and %s gui' % (audio, video)
-  Deskcorder().run(fname)
+  print 'using %s audio and %s gui' \
+      % (config.audio_module, config.gui_module)
+  Main().run(config)

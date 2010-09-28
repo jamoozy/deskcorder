@@ -6,6 +6,7 @@ import struct  # for binary conversions
 import zlib    # to compress audio data in v0.1.x
 import speex   # to compress audio data in v0.2.x
 import wave
+import tarfile
 
 from datatypes import *
 
@@ -20,7 +21,7 @@ DC_VALID_VERSIONS = [(0,1,0), (0,1,1), (0,1,2), (0,2,0)]
 
 # Currently-supported formats.
 FORMATS = {'dcx': "Deskcorder XML file",
-           'dct': "Deskcorder text file",
+           'dar': "Deskcorder archive",
            'dcb': "Deskcorder binary file"}
 
 # Magic number to appear at the beginning of every DCB file.
@@ -71,6 +72,12 @@ def load_wav(fname):
   w.close()
   return data
 
+
+
+############################################################################
+# -------------------------- Deskcorder Data ----------------------------- #
+############################################################################
+
 def load(fname, win_sz = (1,1)):
   '''Reads in a file and returns a 2-tuple of lecture an audio.'''
   try:
@@ -78,6 +85,8 @@ def load(fname, win_sz = (1,1)):
       return _load_dcx(fname, win_sz)
     elif fname.lower().endswith(".dct"):
       return _load_dct(fname, win_sz)
+    elif fname.lower().endswith(".dcb"):
+      return _load_dcb(fname, win_sz)
     else:
       return _load_dcb(fname, win_sz)
   except FormatError:
@@ -93,83 +102,141 @@ def save(fname, trace = None, audiofiles = [], req_v = DC_REC_VERSION):
   else:
     _save_dcb(fname, trace, audiofiles, req_v)
 
-def _save_dcb(fname = 'save.dcb', lecture = None, audiofiles = [], req_v = DC_REC_VERSION):
-  '''Writes DCB-v0.2.0'''
+
+
+############################################################################
+# -------------------------------- DAR ----------------------------------- #
+############################################################################
+
+def _save_dar(fname = "save.dar", lecture = None, adats = []):
+  '''Saves the thing into a DAR archive.'''
+  pass # TODO write me
+
+def _load_dar(fname = "save.dar"):
+  pass # TODO write me
+
+
+
+############################################################################
+# -------------------------------- DCD ----------------------------------- #
+############################################################################
+
+def _save_dcd(dname = "save.dcd", lecture = None, adats = []):
+  pass # TODO write me
+
+def _load_dcd(dname = "save.dcd"):
+  pass # TODO write me
+
+
+
+############################################################################
+# -------------------------------- DCB ----------------------------------- #
+############################################################################
+
+def _save_dcb(fname = 'save.dcb', lecture = None, adats = [], req_v = DC_REC_VERSION):
+  '''Writes a lecture and audio data to a file.'''
   if lecture is None:
     return
   if req_v != DC_REC_VERSION:
     raise VersionError(req_v)
 
-  f = open(fname, 'wb')
-  f_log = open(fname + ".save_log", 'w')
+  fp = open(fname, 'wb')
+  log = open(fname + ".save_log", 'w')
 
-  # header
-  f.write(DCB_MAGIC_NUMBER)
-  f.write(struct.pack("<III", req_v[0], req_v[1], req_v[2]))
-  f_log.write("File version: (%d,%d,%d)\n" % req_v)
+  # --- header ---
+  fp.write(DCB_MAGIC_NUMBER)
+  fp.write(struct.pack("<III", req_v[0], req_v[1], req_v[2]))
+  log.write("File version: (%d,%d,%d)\n" % req_v)
   if req_v[1] >= 2:
-    f.write(struct.pack("<f", lecture.aspect_ratio))
-    f_log.write('File has %d slides, ar = %.2f\n' \
+    fp.write(struct.pack("<f", lecture.aspect_ratio))
+    log.write('File has %d slides, ar = %.2f\n' \
         % (len(lecture.slides), lecture.aspect_ratio))
   else:
-    f_log.write('File will have %d slides\n' % len(lecture.slides))
+    log.write('File will have %d slides\n' % len(lecture.slides))
 
-  f.write(struct.pack("<I", len(lecture)))
+  # --- slides ---
+  fp.write(struct.pack("<I", len(lecture)))
   for slide in lecture.slides:  # Slide block
-    f.write(struct.pack("<QI", int(slide.t * 1000), len(slide))) # tstamp & number of strokes
-    f_log.write('  slide: %d strokes at %.0fms\n' % (len(slide), slide.t))
-    f_log.flush()
-    for stroke in slide.strokes:  # Stroke block
-      f.write(struct.pack("<I", len(stroke))) # number of points in stroke
-      f_log.write('  stroke has %d points\n' % len(stroke))
-      f_log.flush()
-      if len(stroke) > 0:  # remainder of Stroke block
-        # Stroke color
-        if req_v == (0,2,0):
-          f.write(struct.pack("<ff", stroke.aspect_ratio, stroke.thickness))
-          f_log.write("  stroke has ar = %.2f, th = %.2f\n" \
-              % (stroke.aspect_ratio, stroke.thickness))
-        f.write(struct.pack("<fff", stroke.color[0], stroke.color[1], stroke.color[2]))
-        f_log.write('  stroke color: (%.3f,%.3f,%.3f)\n' % stroke.color)
-        f_log.flush()
-        for point in stroke.points:
-          if req_v == (0,1,2):
-            thickness = point.p / math.sqrt(2)
-          else:
-            thickness = point.p
-          f.write(struct.pack("<Qfff", point.t * 1000, point.x(), point.y(), thickness))
-          f_log.write('    point (%.3f,%.3f) @ %.1f with %.2f%%\n' % (point.x(), point.y(), point.t, thickness * 100))
-          f_log.flush()
+    _save_slide(fp, log, slide, req_v)
 
-  f.write(struct.pack("<I", len(lecture.moves)))  # number of moves sans mouse click
-  f_log.write('%d positions\n' % len(lecture.moves))
-  f_log.flush()
+  # --- moves ---
+  fp.write(struct.pack("<I", len(lecture.moves)))  # number of moves sans mouse click
+  log.write('%d positions\n' % len(lecture.moves))
+  log.flush()
   for m in lecture.moves:
-    # point tstamp (ms), x, y
-    f.write(struct.pack("<Qff", m.t * 1000, m.x(), m.y()))
-    f_log.write('  pos: (%.3f,%.3f) @ %fms\n' % (m.x(), m.y(), m.t))
-    f_log.flush()
-  f.write(struct.pack("<I", len(audiofiles))) # number of audio files
-  for af in audiofiles:
+    _save_move(fp, log, m, req_v)
+
+  # --- audio ---
+  fp.write(struct.pack("<I", len(adats))) # number of audio files
+  for af in adats:
+    _save_audio(fp, log, af, req_v)
+
+  fp.flush()
+  fp.close()
+
+def _save_slide(fp, log, slide, req_v):
+  '''Writes a slide to file in DCB format.'''
+  fp.write(struct.pack("<QI", int(slide.t * 1000), len(slide))) # tstamp & number of strokes
+  log.write('  slide: %d strokes at %.0fms\n' % (len(slide), slide.t))
+  log.flush()
+  for stroke in slide.strokes:  # Stroke block
+    _save_stroke(fp, log, stroke, req_v)
+
+def _save_stroke(fp, log, stroke, req_v):
+  '''Writes a stroke to file in DCB format.'''
+  fp.write(struct.pack("<I", len(stroke))) # number of points in stroke
+  log.write('  stroke has %d points\n' % len(stroke))
+  log.flush()
+  if len(stroke) > 0:  # remainder of Stroke block
+    # Stroke color
+    if req_v == (0,2,0):
+      fp.write(struct.pack("<ff", stroke.aspect_ratio, stroke.thickness))
+      log.write("  stroke has ar = %.2f, th = %.2f\n" \
+          % (stroke.aspect_ratio, stroke.thickness))
+    fp.write(struct.pack("<fff", stroke.color[0], stroke.color[1], stroke.color[2]))
+    log.write('  stroke color: (%.3f,%.3f,%.3f)\n' % stroke.color)
+    log.flush()
+    for point in stroke.points:
+      _save_point(fp, log, point, req_v)
+
+def _save_point(fp, log, point, req_v):
+  '''Writes a point to file in DCB format.'''
+  if req_v == (0,1,2):
+    thickness = point.p / math.sqrt(2)
+  else:
+    thickness = point.p
+  fp.write(struct.pack("<Qfff", point.t * 1000, point.x(), point.y(), thickness))
+  log.write('    point (%.3f,%.3f) @ %.1f with %.2f%%\n' \
+      % (point.x(), point.y(), point.t, thickness * 100))
+  log.flush()
+
+def _save_move(fp, log, move, req_v):
+  '''Writes a move to file in DCB format.'''
+  # point tstamp (ms), x, y
+  fp.write(struct.pack("<Qff", move.t * 1000, move.x(), move.y()))
+  log.write('  pos: (%.3f,%.3f) @ %fms\n' % (move.x(), move.y(), move.t))
+  log.flush()
+
+def _save_audio(fp, log, audio, req_v):
+    '''Writes audio data to file in DCB format.'''
     if req_v[1] == 1:
-      c_data = zlib.compress(af[1], zlib.Z_BEST_COMPRESSION)
+      c_data = zlib.compress(audio[1], zlib.Z_BEST_COMPRESSION)
     elif req_v[1] == 2:
       s = speex.new(raw = True)
-      c_data = s.encode(af[1])
+      c_data = s.encode(audio[1])
 
     # tstamp (ms), bytes of data in audio file
-    f.write(struct.pack("<QQ", int(af[0] * 1000), len(c_data)))
-    f_log.write('  audio @ %.2fs with %d bytes\n' % (af[0], len(c_data)))
-    f_log.flush()
-    f.write(c_data) # (compressed) audio data
-  f.flush()
-  f.close()
+    fp.write(struct.pack("<QQ", int(audio[0] * 1000), len(c_data)))
+    log.write('  audio @ %.2fs with %d bytes\n' % (audio[0], len(c_data)))
+    log.flush()
+    fp.write(c_data) # (compressed) audio data
+
+
+# ---------- Loading DCB ---
 
 def bin_read(f, fmt):
   '''Reads file f using struct to get datatypes shown in fmt.'''
   return struct.unpack(fmt, f.read(struct.calcsize(fmt)))
-
-TMP_HACK = False
 
 def _load_dcb(fname = 'save.dcb', win_sz = (1,1)):
   '''Loads DCB-v0.x.x'''
@@ -188,7 +255,7 @@ def _load_dcb(fname = 'save.dcb', win_sz = (1,1)):
 
   if v[0] == 0:
     lec = Lecture()
-    audiofiles = []
+    adats = []
     f_log.write("We're at f.tell():%d\n" % f.tell())
     if v[1] == 2:
       aspect_ratio = bin_read(f, "<f")[0]
@@ -274,13 +341,13 @@ def _load_dcb(fname = 'save.dcb', win_sz = (1,1)):
         f_log.flush()
         # data
         if v[1] == 1:
-          audiofiles.append([t / 1000, zlib.decompress(f.read(sz))])
+          adats.append([t / 1000, zlib.decompress(f.read(sz))])
         elif v[1] == 2:
           s = speex.new(raw = True)
-          audiofiles.append([t / 1000, s.decode(f.read(sz))])
+          adats.append([t / 1000, s.decode(f.read(sz))])
   f.close()
   f_log.close()
-  return lec, audiofiles
+  return lec, adats
 
 def _save_dcx(fname = 'save.dcx', lecture = [], audiofiles = [], req_v = DC_REC_VERSION):
   '''Saves DCX-v0.1.1
