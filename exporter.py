@@ -40,7 +40,8 @@ def to_pdf(trace, ofname, size = (400,300), times = None):
   surface = cairo.PDFSurface("%s.pdf" % ofname, size[0], size[1])
   ctx = cairo.Context(surface)
   if times is None:
-    print 'Writing 1 PDF page'
+    print 'Writing %d PDF %s' % \
+        (len(trace.slides), 'pages' if len(trace.slides) > 1 else 'page')
     for slide in trace.slides:
       _draw_slide_on_surface(ctx, slide, size)
       ctx.show_page()
