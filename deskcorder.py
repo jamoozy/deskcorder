@@ -95,17 +95,19 @@ class Main:
     self.config = config
     if config is None: return
 
-    print 'Loading from "%s"' % config.config_dir
+    print 'Loading configuration from "%s"' % config.config_dir
 
     if os.path.isdir(config.lecture_dir):
       self.gui.ask_recover()
 
     if config.file_to_load is not None and config.file_to_load is not False:
+      print 'Loading', config.file_to_load
       try:
         self.load(config.file_to_load)
       except IOError as e:
         print 'Could not load file, %s: %s"' % (fname, str(e))
-
+    else:
+      print 'config.file_to_load:', config.file_to_load
 
   def run(self, config = None):
     '''Runs the program.'''
@@ -354,6 +356,7 @@ class Main:
         self.gui.canvas.dirty = False
         self.gui.set_fname(fname)
         return True
+      print 'Could not load', fname
       return False
     except recorder.FormatError:
       return False
@@ -501,12 +504,10 @@ def parse_args(args):
       config.gui(arg[10:])
     elif arg.startswith('--use-audio='):
       config.audio(arg[12:])
-    elif arg == '--exp-pdf':
-      config.export('pdf')
-    elif arg == '--exp-swf':
-      config.export('swf')
+    elif arg.startswith('--exp-'):
+      config.export(arg[-3:])
     else:
-      fname = arg
+      config.load_file(arg)
   return config
 
 if __name__ == '__main__':
@@ -519,13 +520,16 @@ if __name__ == '__main__':
 
   if config.export_fmt is not None:
     if config.export_fmt == 'swf':
-      lec, a = recorder.load(fname[0])
-      exporter.to_swf(lec, a, fname[0][:-4] + '.swf')
+      lec, a = recorder.load(config.file_to_load)
+      exporter.to_swf(lec, a, config.file_to_load[:-4] + '.swf')
     elif config.export_fmt == 'pdf':
-      lec, a = recorder.load(fname[0])
-      exporter.to_pdf(lec, fname[0][:-4] + '.swf')
+      lec, a = recorder.load(config.file_to_load)
+      exporter.to_pdf(lec, config.file_to_load[:-4] + '.swf')
+    elif config.export_fmt in ['dcd', 'dcb', 'dcx', 'dar', 'dct']:
+      lec, a = recorder.load(config.file_to_load)
+      recorder.save(config.file_to_load[:-3] + config.export_fmt, lec, a)
     else:
-      print 'Unknown flag "--exp-%s"' % fname[1]
+      print 'Unknown flag "--exp-%s"' % config.export_fmt
     sys.exit(0)
 
   # Something was passed, so use that to 
