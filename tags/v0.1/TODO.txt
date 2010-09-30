@@ -1,0 +1,28 @@
+A list of things to do:
+
+1) Core functionality:
+  - Make dummy.GUI() and dummy.Audio() correct
+    * add all functions
+    * write in "oops" prints
+
+2) Export Dialog (GNU/Linux version)
+  - create export dialog for custom positions (as opposed to slides)
+
+3) Cross-platformnes
+  - Build me ... probably with Cocoa
+  - Build me ... not sure what with.
+  - Finish me ... useful?
+
+4) Make some new UI features (buttons/menus)
+  - undo/redo (probably just pop off the last stroke)
+  - eraser (delete stroke vs. large white brush)
+  - "go back" feature?  I was thinking something that allows you to go back a
+    slide to add something you just remembered.
+    * This would necessitate altering the timestamps
+      sequentially, updating them to "fit" the new stuff in.
+    * Find some intuitive way to find the exact place that
+      you want the remembered data to be put (assume end?).
+
+6) Progress bar display updates in status (Audio callback?)
+
+7) Mouse cursor change to dot on draw.

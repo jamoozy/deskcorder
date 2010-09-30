@@ -1,0 +1,93 @@
+Documentation of what the heck is going on with the DCB file format.
+Eventually I'd like to have this be in a nice \LaTeX'd-up file.
+
+\hfill --jam--
+
+Chapter 1: What do the versions mean????
+
+Version 0.1.x:  (v0.1.0 is invalid---see Appendix A)
+  uint(8): magic number ()
+  uint(4): major version number
+  uint(4): minor version number
+  uint(4): bug version number
+  uint(4): number of slide blocks
+    Slide block:
+      uint(8): time when slide was created (ms)
+      uint(4): number of strokes
+        Stroke block:
+          uint(4): number of points
+        ---> if this number is 0, we're done, else continue the block
+          float(4): red color component \in [0,1]
+          float(4): green color component \in [0,1]
+          float(4): blue color component \in [0,1]
+            Point block:
+              uint(8): time stamp
+              float(4): x coordinate \in [0,1]
+              float(4): y coordinate \in [0,1]
+              float(4): thickness \in [0,1]
+                        (0 means invisible, 1 means "whole screen")
+            ---> for 0.1.1: thickness in point is this number.
+                 for 0.1.2: thickness in point is this number / root(2)
+  uint(4): number of moves
+    Move block:
+      uint(8): time stamp of start
+      uint(4): x coordinate \in [0,1]
+      uint(4): y coordinate \in [0,1]
+  uint(4) number of audio snippets
+    Audio block:
+      uint(8): timestamp
+      uint(8): length of zlib-compressed audio data
+      data(?): zlib-compressed audio data
+
+Version 0.2.x:
+  uint(8): magic number ()
+  uint(4): major version number
+  uint(4): minor version number
+  uint(4): bug version number
+  float(4): aspect ratio (width / height) of lecture (at start)
+  uint(4): number of slide blocks
+    Slide block:
+      uint(8): time when slide was created (ms)
+      uint(4): number of strokes
+        Stroke block:
+          uint(4): number of points
+        ---> if this number is 0, we're done, else continue the block
+          float(4): aspect ratio when stroke drawn
+          float(4): thickness \in [0,1]
+                        0 means "invisible"
+                        1 means "covering the whole screen"
+          float(4): red color component \in [0,1]
+          float(4): green color component \in [0,1]
+          float(4): blue color component \in [0,1]
+            Point block:
+              uint(8): time stamp
+              float(4): x coordinate \in [0,1]
+              float(4): y coordinate \in [0,1]
+              float(4): pressure \in [0,1]
+                            0 means "off the paper"
+                            1 means "full pressure"
+  uint(4): number of moves
+    Move block:
+      uint(8): time stamp of start
+      uint(4): x coordinate \in [0,1]
+      uint(4): y coordinate \in [0,1]
+  uint(4) number of audio snippets
+    Audio block:
+      uint(8): timestamp
+      uint(8): length of speex-compressed audio data
+      data(?): speex-compressed audio data
+
+
+
+Chapter 2: How are things stored in the types, and how does that differ?
+magic
+it just does
+
+
+
+Appendix A:
+v0.1.0 is invalid, because for each Audio block, I stored the length of
+the raw audio data, then compressed, then wrote.  As a result, the 2nd
+uint(8) value (length of zlib-compressed data) was wrong and the audio
+data was pretty much unrecoverable.  The reading function will ignore
+the audio data in a v0.1.0 file.
