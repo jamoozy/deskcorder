@@ -11,41 +11,68 @@ This object is the representation of one run of the program.  It's called a
 between when a professor or a TA started a class, to the time he or she ended
 it.  More generally, you can think of this as a ``session''.'''
   class Iterator(object): def __init__(self, lec, offset = None):
-      self.lecture = lec
-      self.last_prog = 0
+    class State(object):
+      def __init__(self):
+        self.color = (.0,.0,.0)
+        self.thickness = .01
+        self.win_sz = (1.,1.)
 
-      # This tells me what I'm returning.
-      self._return_type = 'slide'
+      def aspect_ratio(self):
+        return self.win_sz[0] / float(self.win_sz[1])
 
-      # Difference between "I'm just about to start" and "I just finished" is
-      # the difference in the value of this boolean.
-      self.complete = False
-      self.slide_i = 0
-      self.strok_i = 0
-      self.point_i = -1
-      self._next = []
-      self._inc(newStroke = True)
-      self.offset = offset or self.lecture.get_time_of_first_event()
+    def __init__(self):
+      self.lec = lec
+      self.state = Lecture.Iterator.State()
+      self.offset = lec.first.utime()
+      self.i = 0  # i is always the next to be returned.
+                  # When i has passed the end of lec, we're done.
 
-    def seek(self, offset):
-      self.offset = offset
+    def seek_to_time(self, prog):
+      abs_prog = self.offset + prog
+      self.i = 0  # reset
+      # Increment until we're at one before what should be the next one.
+      while self.lec.events[self.i].utime() <= abs_prog: self.i += 1
+
+    def seek(self, idx):
+      '''Continue as though lecture[idx] is next.'''
+      self.i = idx
+
+    def has_next(self):
+      return self.lec.num_events() > self.i
+
+    def _update_state(self, event):
+      '''Updates the iterator state (the state of Deskcorder at the time
+      this event was made) based on the event.'''
+      if type(event) == Clear:
+        pass
+      elif type(event) == Thickness:
+        self.state.thickness = event.thickness
+      elif type(event) == Start:
+        self.state.win_sz = (event.w, event.h)
+      elif type(event) == Color:
+        self.color = event.color
+
+    def peek(self):
+      '''Return the next value without iterating.'''
+      return self.lec[self.i] if self.has_next() else None
 
     def next(self, prog = None):
       '''Two modes of operation:
-  1) Call without 'prog'ress and you will simply get the next element (slide,
+  (1) Call without 'prog'ress and you will simply get the next element (slide,
      stroke, or point)
-  2) Call with progress, and you will get all elements between the last time
-     you called this function and now.'''
+  (2) Call with progress, and you will get all elements between the last time
+     you called this function and now.
+     
+[Note]: The only exception to (2) is when you use a seek().'''
       if prog is None:  # Default "get me the next one"
         if self.has_next():
-          if len(self._next) > 0:
-            return self._next.pop()
           try:
-            return self.lecture[self.slide_i][self.strok_i][self.point_i]
+            self._update_state(self.peek())
+            return self.peek()
           finally:
-            self._inc()
+            self.i += 1
         else:
-          return None
+          raise StopIteration("End of lecture.")
       # Get me everything not yet returned, that should be displayed (may skip
       # the end part of a slide if between this call and the previous one
       # those things were drawn, but the screen was already cleared.  Poor
@@ -54,48 +81,10 @@ it.  More generally, you can think of this as a ``session''.'''
         abs_prog = self.offset + prog
         elems = []
         while self.has_next():
-          e = self.next()
-          if e.t <= self.last_prog: # shouldn't ever happen
-            print "weird, it does happen"
-          elif e.t <= abs_prog:
-            elems.append(e)
-          else:
-            self._next.append(e)
-            break
-        self.last_prog = abs_prog
+          if self.peek().utime() > abs_prog: break
+          elems.append(self.peek())
+          self.i += 1
         return elems
-
-    def has_next(self):
-      return (len(self._next) > 0) or (not self.complete)
-
-    def _validate(self):
-      if self.slide_i < len(self.lecture):
-        while self.strok_i < len(self.lecture[self.slide_i]):
-          if self.point_i < len(self.lecture[self.slide_i][self.strok_i]):
-            return
-          self.point = 0
-          self.strok_i += 1
-      self.complete = True
-
-    def _inc(self, newStroke = False):
-      self.point_i += 1
-      newSlide = False
-      while self.slide_i < len(self.lecture):
-        if newSlide:
-          self._next.insert(0, self.lecture[self.slide_i])
-        while self.strok_i < len(self.lecture[self.slide_i]):
-          if self.point_i < len(self.lecture[self.slide_i][self.strok_i]):
-            if newStroke:
-              self._next.insert(0, self.lecture[self.slide_i][self.strok_i])
-            return
-          self.point_i = 0
-          self.strok_i += 1
-          newStroke = True
-        self.point_i = 0
-        self.strok_i = 0
-        self.slide_i += 1
-        newSlide = True
-      self.complete = True
 
   def __init__(self, t = None):
     '''Initialize a blank state object.  If you have internal data (formerly
@@ -117,6 +106,13 @@ known as a "trace"), then you can just pass that here.'''
   def __len__(self):
     return len(self.events)
 
+  def append(self, e):
+    if type(e) == AudioRecord:
+      self.adats.append(e.get_media())
+    elif type(e) == VideoRecord:
+      self.vdats.append(e.get_media())
+    self.events.append(e)
+
   def first(self):
     return self.events[0] if len(self.events) else None
 
@@ -124,32 +120,18 @@ known as a "trace"), then you can just pass that here.'''
     '''Returns [] (not None) if empty so len() works.'''
     return self.events[-1] if len(self.events) > 0 else None
 
+  def num_events(self):
+    return len(self.events)
+
   def is_empty(self):
     return self.num_events() <= 0
 
-  def get_first_event(self):
-    try:
-      return self.slides[0].strokes[0].points[0]
-    except IndexError:
-      return None
-
-  def get_time_of_first_event(self):
-    f = self.get_first_event()
-    return f.utime() if f is not None else -1
-
-  def get_last_event(self):
-    try:
-      return self.slides[-1].strokes[-1].points[-1]
-    except IndexError:
-      return None
-
-  def get_time_of_last_event(self):
-    l = self.get_last_event()
-    return l.utime() if l is not None else -1
-
-  def get_duration(self):
+  def duration(self):
     '''Computes the duration in s of the lecture.'''
-    return .0
+    if self.num_events() > 0:
+      return self.last().utime() - self.first().utime()
+    else:
+      return .0
 
 
 
@@ -169,19 +151,9 @@ class Event(object):
     '''Returns the time this data was created.''' 
     raise self.t
 
-  def make_data(self):
-    '''Make data for this object.  This will be written or something to
-    things and stuff.'''
-    raise Event.Error('%s.make_data() not defined', self.__class__.__name__)
-
-  def load_data(self, data):
-    '''Load data into this object.  Class-specific.  Should be the same as
-    what make_data() returns.'''
-    raise Event.Error('%s.load_data() not defined', self.__class__.__name__)
-
 class MouseEvent(Event):
   '''An event that has an (x,y) and time.'''
-  def __init__(self, pos, t):
+  def __init__(self, t, pos):
     Event.__init__(self, t)
     self.pos = pos
 
@@ -193,25 +165,35 @@ class MouseEvent(Event):
 
 class Move(MouseEvent):
   '''Undrawn point (the pen is up).'''
-  def __init__(self, pos, t, p):
+  def __init__(self, t, pos):
     MouseEvent.__init__(self, pos, t)
-    self.p = p  # \in [0,1] meaning no--full pressure
 
 class Point(MouseEvent):
   '''Drawn point (the pen is down).'''
-  def __init__(self, pos, t, p):
+  def __init__(self, t, pos, p):
     MouseEvent.__init__(self, pos, t)
     self.p = p  # \in [0,1] meaning no--full pressure
 
   def __str__(self):
     return 'Point: (%f,%f) @ %f with %f%%' % (self.pos + (self.t, self.p * 100))
 
-# FIXME Is this really needed?  Isnt' this just a Move with the state different?
 class Drag(MouseEvent):
   '''Dragging something across the screen.'''
-  def __init__(self, pos, t, i):
+  def __init__(self, t, pos, i):
     MouseEvent.__init__(self, pos, t)
-    self.i = i  # event ID of the thing we're dragging
+    self.i = i  # "object ID" of what's being dragged
+
+  def x(self):
+    Event.Error("Drag.x() invalid")
+
+  def y(self):
+    Event.Error("Drag.y() invalid")
+
+  def dx(self):
+    return self.pos[0]
+
+  def dy(self):
+    return self.pos[1]
 
 class Click(MouseEvent):
   '''The mouse was clicked.  a.k.a. "mouse-down"'''
@@ -221,18 +203,37 @@ class Release(MouseEvent):
   '''The mouse was released.  a.k.a. "mouse-up"'''
   pass
 
-class Record(Event):
-  '''Something (A/V) started recording.'''
-  def __init__(self, t, dat, dat_i):
+class MediaEvent(Event):
+  def __init__(self, t, i);
+  '''Creates a new MediaEvent with a pointer to the media it effected.'''
     Event.__init__(self, t)
-    self.lec_i = lec_i
-    self.dat = dat
+    self.i = i
 
-class Stop(Event):
+  def get_media(self):
+    raise Event.Error("%s.get_media() not implemented" \
+        % self.__class__.__name__)
+
+class MediaRecordEvent(MediaEvent):
+  def __init__(self, t, i, media):
+    MediaEvent.__init__(self, t, i)
+    self.media = media
+
+  def get_media(self):
+    return self.media
+
+class AudioRecord(MediaRecordEvent):
+  '''Microphone started recording.'''
+  def __init__(self, t, i, media):
+    MediaRecordEvent.__init__(self, t, i, media)
+    if type(media) != AudioData:
+      raise Event.Error("Data should be AudioData, not %s" % type(media))
+
+class VideoRecord(MediaRecordEvent):
   '''Something (A/V) stopped recording.'''
-  def __init__(self, t, lec_i):
-    Event.__init__(self, t)
-    self.lec_i = lec_i
+  def __init__(self, t, i, media):
+    MediaEvent.__init__(self, t, i, media)
+    if type(media) != VideoData:
+      raise Event.Error("Data should be VideoData, not %s" % type(media))
 
 class Clear(Event):
   '''Clear the screen and set a new background.'''
@@ -265,7 +266,7 @@ class Start(Event):
   '''The program was started.'''
   def __init__(self, t, ar):
     Event.__init__(self, t)
-    self.aspect_ration = ar
+    self.aspect_ratio = ar
 
 class End(Event):
   '''The program was ended.'''
@@ -274,9 +275,13 @@ class End(Event):
 
 class Resize(Event):
   '''The screen was resized.'''
-  def __init__(self, t, ar):
+  def __init__(self, t, w, h):
     Event.__init__(self, t)
-    self.aspect_ration = ar
+    self.w = w
+    self.h = h
+
+  def aspect_ratio(self):
+    return self.w / float(self.h)
 
 
 
@@ -284,18 +289,34 @@ class Resize(Event):
 # --------------------- ?
 ############################################################################
 
-class AudioData(object):
+class Media(object):
+  def __init__(self):
+    self.files = []
+
+class AudioData(Media):
   '''Audio data.'''
-  def __init__(self):
-    pass
 
-  def append(self, dat):
-    pass
+  # Enumeration of the various types that are used.
+  MP3 = 0
+  WAV = 1
+  SPX = 2
+  TYPES = [None] * 3
 
-class VideoData(object):
+  def load_media(self, key, data):
+    if key not in self.TYPES:
+      raise Event.Error("Invalid data type key: %s" % key)
+    self.files[key] = data
+
+class VideoData(Media):
   '''Video data.'''
-  def __init__(self):
-    pass
 
-  def append(self, dat):
-    pass
+  # Enumeration of the various types that are used.
+  MOV = 0
+  MPG = 1
+  RAW = 2
+  TYPES = [None] * 3
+
+  def load_media(self, key, data):
+    if key not in self.TYPES:
+      raise Event.Error("Invalid data type key: %s" % key)
+    self.files[key] = data
