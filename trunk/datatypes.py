@@ -10,8 +10,7 @@ This object is the representation of one run of the program.  It's called a
 ``Lecture'' because originally, that's what it was, a lecture---the time
 between when a professor or a TA started a class, to the time he or she ended
 it.  More generally, you can think of this as a ``session''.'''
-  class Iterator(object):
-    def __init__(self, lec, offset = None):
+  class Iterator(object): def __init__(self, lec, offset = None):
       self.lecture = lec
       self.last_prog = 0
 
@@ -101,84 +100,32 @@ it.  More generally, you can think of this as a ``session''.'''
   def __init__(self, t = None):
     '''Initialize a blank state object.  If you have internal data (formerly
 known as a "trace"), then you can just pass that here.'''
-    self.aspect_ratio = 4./3 # default-ish
-    self.slides = [] if t is None else [Slide(t)]
-    self.moves = []  # like strokes, except the pen is up
-
-  def load_trace_data(self, data):
-    '''Load from the old, tuple-ized format.'''
-    self.slides = []
-    for s in data:
-      if type(s) == float:
-        self.slides.append(Slide(s))
-      elif type(s) == list:
-        self.slides[-1].load_trace_data(s)
-      else:
-        raise RuntimeError('Unrecognized type')
-
-  def load_position_data(self, data):
-    '''Load the position information from the old tuple-ized format.'''
-    self.moves = [Point.from_position_data(p) for p in data]
-
-  def make_trace_data(self):
-    '''Converts this data into the old tuple-rific format.'''
-    data = []
-    for s in self.slides:
-      data += s.make_trace_data()
-    return data
-
-  def make_position_data(self):
-    return [m.make_position_data() for m in self.moves]
+    self.events = []
+    self.adats = []
+    self.vdats = []  # XXX For a future release.
 
   def __str__(self):
-    return 'Lecture with %d slides' % len(self.slides)
+    return 'Lecture with %d events, %d audio blocks, and %d video blocks' \
+        % (len(self.events), len(self.adats), len(self.vdats))
 
   def __iter__(self):
     return Lecture.Iterator(self)
 
   def __getitem__(self, i):
-    return self.slides[i]
+    return self.events[i]
 
   def __len__(self):
-    return len(self.slides)
+    return len(self.events)
 
   def first(self):
-    return self.slides[0] if len(self.slides) else []
+    return self.events[0] if len(self.events) else None
 
   def last(self):
     '''Returns [] (not None) if empty so len() works.'''
-    return self.slides[-1] if len(self.slides) > 0 else []
+    return self.events[-1] if len(self.events) > 0 else None
 
   def is_empty(self):
-    return self.num_strokes() <= 0
-
-  def add_move(self, pos, t = None):
-    if type(pos) == tuple:
-      if t is None:
-        self.moves.append(Point(pos, time.time(), 0.))
-      else:
-        self.moves.append(Point(pos, t, 0.))
-    elif type(pos) == Point:
-      self.moves.append(pos)
-    else:
-      raise RuntimeError('Expected list, tuple, or Point')
-
-  def append(self, s):
-    if type(s) == Slide:
-      self.slides.append(s)
-    elif type(s) == float:
-      self.slides.append(Slide(s))
-    else:
-      raise RuntimeError('Expected Slide or timestamp')
-
-  def get_strokes(self):
-    return [stroke for slide in self.slides for stroke in slide.strokes]
-
-  def num_strokes(self):
-    return reduce(lambda a,b: a+b, map(lambda x: len(x), self.slides), 0)
-
-  def get_points(self):
-    return [point for stroke in self.get_strokes() for point in stroke.points]
+    return self.num_events() <= 0
 
   def get_first_event(self):
     try:
@@ -188,7 +135,7 @@ known as a "trace"), then you can just pass that here.'''
 
   def get_time_of_first_event(self):
     f = self.get_first_event()
-    return f.t if f is not None else -1
+    return f.utime() if f is not None else -1
 
   def get_last_event(self):
     try:
@@ -198,94 +145,106 @@ known as a "trace"), then you can just pass that here.'''
 
   def get_time_of_last_event(self):
     l = self.get_last_event()
-    return l.t if l is not None else -1
-
-  def percentage_to_tstring(self, pct):
-    dur = self.get_duration()
-    if dur == 0:
-      return "0:00"
-    else:
-      amt = int(dur * pct)
-      return "%d:%02d" % (amt / 60, amt % 60)
+    return l.utime() if l is not None else -1
 
   def get_duration(self):
     '''Computes the duration in s of the lecture.'''
-    last = self.get_time_of_last_event()
-    first = self.get_time_of_first_event()
-    print 'last:%f first:%f' % (last, first)
-    return last - first
+    return .0
 
 
-class Slide(object):
+
+############################################################################
+# -------------------------------- Events -------------------------------- #
+############################################################################
+
+class Event(object):
+  class Error(Exception):
+    '''Represents a missing function in a class that extends Event.'''
+    pass
+
   def __init__(self, t):
     self.t = t
-    self.strokes = []
 
-  def load_trace_data(self, data):
-    for s in data:
-      self.strokes.append(Stroke())
-      self.strokes[-1].load_trace_data(s)
+  def utime(self):
+    '''Returns the time this data was created.''' 
+    raise self.t
 
-  def make_trace_data(self):
-    return [self.t] + [[s.make_trace_data() for s in self.strokes]]
+  def make_data(self):
+    '''Make data for this object.  This will be written or something to
+    things and stuff.'''
+    raise Event.Error('%s.make_data() not defined', self.__class__.__name__)
+
+  def load_data(self, data):
+    '''Load data into this object.  Class-specific.  Should be the same as
+    what make_data() returns.'''
+    raise Event.Error('%s.load_data() not defined', self.__class__.__name__)
+
+class MouseEvent(Event):
+  '''An event that has an (x,y) and time.'''
+  def __init__(self, pos, t):
+    Event.__init__(self, t)
+    self.pos = pos
+
+  def x(self):
+    return self.pos[0]
+
+  def y(self):
+    return self.pos[1]
+
+class Move(MouseEvent):
+  '''Undrawn point (the pen is up).'''
+  def __init__(self, pos, t, p):
+    MouseEvent.__init__(self, pos, t)
+    self.p = p  # \in [0,1] meaning no--full pressure
+
+class Point(MouseEvent):
+  '''Drawn point (the pen is down).'''
+  def __init__(self, pos, t, p):
+    MouseEvent.__init__(self, pos, t)
+    self.p = p  # \in [0,1] meaning no--full pressure
 
   def __str__(self):
-    return "Slide with %d strokes" % len(self.strokes)
+    return 'Point: (%f,%f) @ %f with %f%%' % (self.pos + (self.t, self.p * 100))
 
-  def __getitem__(self, i):
-    return self.strokes[i]
+# FIXME Is this really needed?  Isnt' this just a Move with the state different?
+class Drag(MouseEvent):
+  '''Dragging something across the screen.'''
+  def __init__(self, pos, t, i):
+    MouseEvent.__init__(self, pos, t)
+    self.i = i  # event ID of the thing we're dragging
 
-  def __len__(self):
-    return len(self.strokes)
+class Click(MouseEvent):
+  '''The mouse was clicked.  a.k.a. "mouse-down"'''
+  pass
 
-  def first(self):
-    return self.strokes[0] if len(self.strokes) > 0 else []
+class Release(MouseEvent):
+  '''The mouse was released.  a.k.a. "mouse-up"'''
+  pass
 
-  def last(self):
-    '''Returns [] (not None) if empty so len() works.'''
-    return self.strokes[-1] if len(self.strokes) > 0 else []
+class Record(Event):
+  '''Something (A/V) started recording.'''
+  def __init__(self, t, dat, dat_i):
+    Event.__init__(self, t)
+    self.lec_i = lec_i
+    self.dat = dat
 
-  def append(self, r, g = None, b = None):
-    if type(r) == Stroke:
-      self.strokes.append(r)
-    elif type(r) == tuple:
-      self.strokes.append(Stroke(r))
-    elif g is not None and b is not None:
-      self.strokes.append(Stroke((r,g,b)))
-    else:
-      raise RuntimeError('Expected Stroke, not %s' % str(type(r)))
+class Stop(Event):
+  '''Something (A/V) stopped recording.'''
+  def __init__(self, t, lec_i):
+    Event.__init__(self, t)
+    self.lec_i = lec_i
 
+class Clear(Event):
+  '''Clear the screen and set a new background.'''
+  def __init__(self, t, bg):
+    Event.__init__(self, t)
+    self.bg = bg  # TODO something intelligent...
 
-class Stroke(object):
-  def __init__(self, color = (0.,0.,0.), aspect_ratio = 4./3, thickness = 0.01):
+class Color(Event):
+  '''The color changed.'''
+  def __init__(self, t, color):
+    Event.__init__(self, t)
     self.color = color
-    self.points = []
-    self.aspect_ratio = aspect_ratio
-    self.thickness = thickness
-
-  def load_trace_data(self, data):
-    self.color = data[0][3]
-    for p in data:
-      self.points.append(Point.from_trace_data(p))
-
-  def make_trace_data(self):
-    return [p.make_trace_data() + (self.color, (1, 1)) for p in self.points]
-
-  def __str__(self):
-    return 'Stroke with %d points' % len(self.points)
-
-  def __getitem__(self, i):
-    return self.points[i]
-
-  def __len__(self):
-    return len(self.points)
-
-  def first(self):
-    return self.points[0] if len(self.points) > 0 else []
-
-  def last(self):
-    '''Returns [] (not None) if empty so len() works.'''
-    return self.points[-1] if len(self.points) > 0 else []
 
   def r(self):
     return self.color[0]
@@ -296,59 +255,47 @@ class Stroke(object):
   def b(self):
     return self.color[2]
 
-  def append(self, pos, t = None, r = None):
-    if type(pos) == tuple:
-      self.points.append(Point(pos, t, r))
-    elif type(pos) == Point:
-      self.points.append(pos)
-    else:
-      raise RuntimeError('Excpected tuple, list, or Point')
+class Thickness(Event):
+  '''The thickness changed.'''
+  def __init__(self, t, thickness):
+    Event.__init__(self, t)
+    self.thickness = thickness
 
-  def get_start_t(self):
-    if len(self) == 0:
-      return 0
-    return self.first().t
+class Start(Event):
+  '''The program was started.'''
+  def __init__(self, t, ar):
+    Event.__init__(self, t)
+    self.aspect_ration = ar
 
-  t = property(get_start_t)
+class End(Event):
+  '''The program was ended.'''
+  def __init__(self, t):
+    Event.__init__(self, t)
 
-class Point(object):
-  @staticmethod
-  def from_trace_data(p):
-    return Point((p[1][0]/p[4][0],p[1][1]/p[4][1]), p[0], p[2])
+class Resize(Event):
+  '''The screen was resized.'''
+  def __init__(self, t, ar):
+    Event.__init__(self, t)
+    self.aspect_ration = ar
 
-  @staticmethod
-  def from_position_data(p):
-    return Point((p[1][0]/p[2][0],p[1][1]/p[2][1]), p[0], .0)
 
-  def __init__(self, pos, t, p):
-    self.pos = pos
-    self.t = t
-    self.p = p  # \in [0,1] meaning no--full pressure
 
-  def load_trace_data(self, data):
-    self.pos = data[1]
-    self.t = data[0]
-    self.p = data[2]
+############################################################################
+# --------------------- ?
+############################################################################
 
-  def make_trace_data(self):
-    '''Return this as a (time, pos, pressure) tuple.'''
-    return (self.t, self.pos, self.p)
-
-  def make_position_data(self):
-    return (self.t, self.pos, (1,1))
-
-  def __str__(self):
-    return 'Point: (%f,%f) @ %f with %f%%' % (self.pos + (self.t, self.p * 100))
-
-  def x(self):
-    return self.pos[0]
-
-  def y(self):
-    return self.pos[1]
-
-class AData(object):
+class AudioData(object):
   '''Audio data.'''
-  def __init__(self, a_data):
-    self.t = time.time() if t is None else t
-    self.data = []
+  def __init__(self):
+    pass
 
+  def append(self, dat):
+    pass
+
+class VideoData(object):
+  '''Video data.'''
+  def __init__(self):
+    pass
+
+  def append(self, dat):
+    pass
