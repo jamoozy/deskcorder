@@ -57,9 +57,6 @@ class Canvas(gtk.DrawingArea):
 
     self.set_size_request(800,600)
 
-  def get_time_of_first_event(self):
-    self.dc.lecture.get_time_of_first_event()
-
   def freeze(self):
     self.frozen = True
 
@@ -67,7 +64,7 @@ class Canvas(gtk.DrawingArea):
     self.frozen = False
 
   def draw_last_slide(self):
-    for stroke in self.dc.lecture.last():
+    for event in self.dc.lec.last_slide():
       if len(stroke) < 1: continue
       elif len(stroke) < 2:
         self.draw(stroke.color, stroke.thickness * stroke[0].p, stroke[0].pos)
@@ -82,12 +79,12 @@ class Canvas(gtk.DrawingArea):
   def draw_to_ttpt(self):
     stroke = None
     i = 0  # 1st slide (default)
-    for i in xrange(len(self.dc.lecture)-1):
-      if self.dc.lecture[i].t < self.ttpt and self.ttpt < self.dc.lecture[i+1]:
-        stroke = self.dc.lecture[i]
+    for i in xrange(len(self.dc.lec)-1):
+      if self.dc.lec[i].t < self.ttpt and self.ttpt < self.dc.lec[i+1]:
+        stroke = self.dc.lec[i]
         break
 
-    for stroke in self.dc.lecture[i]:
+    for stroke in self.dc.lec[i]:
       if len(stroke) > 1:
         if stroke[1].t < self.ttpt:
           self.draw(stroke.color, stroke.thickness * stroke[0].p,
@@ -113,22 +110,21 @@ class Canvas(gtk.DrawingArea):
     self.refresh()
 
   def get_pressure_or_default(self, device, default = None):
-    pressures = [dev.get_axis(dev.get_state(self.window)[0], gtk.gdk.AXIS_PRESSURE) for dev in gtk.gdk.devices_list()]
+    pressures = [dev.get_axis(dev.get_state(self.window)[0],
+      gtk.gdk.AXIS_PRESSURE) for dev in gtk.gdk.devices_list()]
     p = max([0.0] + [i for i in pressures if i is not None])
-    if p < 1e-5:
-      p = None
-#    state = device.get_state(self.window)
-#    p = device.get_axis(state[0], gtk.gdk.AXIS_PRESSURE)
-#    print p
+    if p < 1e-5: p = None
     return default if default is not None and p is None else p
 
   def gtk_button_press(self, widget, event):
     if not self.frozen:
+      pos = event.get_coords()
+      pos = (pos[0] / float(self.size[0]), pos[1] / float(self.size[1]))
       self.dirty = True
       self.drawing = True
       ratio = self.size[0] / float(self.size[1])
-      self.dc.lecture.last().append(Stroke(self.color, ratio,
-          self.radius / math.sqrt(self.size[0]**2 + self.size[1]**2)))
+      self.dc.lec.append(Point(time.time(), pos, 
+          self.get_pressure_or_default(event.device, .5)))
 
   def gtk_motion(self, widget, event):
     if not self.frozen:
@@ -137,16 +133,17 @@ class Canvas(gtk.DrawingArea):
       if self.drawing:
         self.dirty = True
         p = self.get_pressure_or_default(event.device, .5)
-        r = p * self.dc.lecture.last().last().thickness
-        if len(self.dc.lecture.last().last()) > 1:
-          self.draw(self.color, r, self.dc.lecture[-1][-1][-2].pos, self.dc.lecture[-1][-1][-1].pos, pos)
-        elif len(self.dc.lecture.last().last()) > 0:
-          self.draw(self.color, r, self.dc.lecture[-1][-1][-1].pos, pos)
+        r = p * self.dc.lec.state.thickness
+        points = self.dc.lec.last_points(2)
+        if len(points) > 1:
+          self.draw(self.color, r, points[-2].pos, points[-1].pos, pos)
+        elif len(points) > 0:
+          self.draw(self.color, r, points[-1].pos, pos)
         else:
           self.draw(self.color, r, pos)
-        self.dc.lecture.last().last().append(pos, time.time(), p)
+        self.dc.lec.append(Point(time.time(), pos, p))
       else:
-        self.dc.lecture.add_move(pos, time.time())
+        self.dc.lec.append(Move(time.time(), pos))
 
   def gtk_button_release(self, widget, event):
     if not self.frozen:
@@ -183,7 +180,7 @@ class Canvas(gtk.DrawingArea):
     self.raster_cr.fill()
     self.refresh()
     if not self.frozen:
-      self.dc.lecture.append(time.time())
+      self.dc.lec.append(time.time())
 
   def refresh(self):
     reg = gtk.gdk.Region()
@@ -192,7 +189,7 @@ class Canvas(gtk.DrawingArea):
 
   def reset(self):
     self.clear()
-    self.dc.lecture = Lecture(time.time())
+    self.dc.lec = Lecture(time.time())
     self.positions = []
     self.dirty = False
     self.frozen = False
@@ -365,7 +362,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
 #    b.load_from_file('exp-dialog.gtk')
 #    model = b.builder.get_object('treeview').get_model()
 #
-#    tstamps = map(lambda x: x.t - .1, self.canvas.dc.lecture.slides[1:]) + [self.canvas.dc.lecture.last().last().last().t + .1]
+#    tstamps = map(lambda x: x.t - .1, self.canvas.dc.lec.slides[1:]) + [self.canvas.dc.lec.last().last().last().t + .1]
 #    for ts in tstamps:
 #      it = b.builder.get_object('list').append((gobject.TYPE_UINT64, gobject.TYPE_STRING))
 #      b.builder.get_object('list').append(it, 0, ts, 
@@ -700,11 +697,12 @@ class InvalidOperationError(RuntimeError):
   pass
 
 class Audio:
-  def __init__(self):
+  def __init__(self, lec):
     self.data = []  # K.I.S.S.  Data stored as a string.
     # next version: store an array of strings.  Do smart things to determine
     # when no one is talking.
 
+    self.lec = lec
     self.startTime = time.time()
 
     self.play_start = None
@@ -727,32 +725,12 @@ class Audio:
     self.out.setperiodsize(self.period_size)
     self.out.setformat(self.format)
 
-  def make_data(self):
-    data = []
-    for d in self.data:
-      data.append([d[0], ''])
-      for p in d[1]:
-        data[-1][1] += p
-    return data
-
-  def load_data(self, data):
-    self.data = []
-    for d in data:
-      self.data.append([d[0], []])
-      i1 = 0
-      i2 = self.period_size
-      while i1 < len(d[1]):
-        self.data[-1][1].append(d[1][i1:i2])
-        i1 = i2
-        i2 += self.period_size
-
   def print_info(self):
     print 'Card name: %s' % a.inp.cardname()
     print ' PCM mode: %d' % a.inp.pcmmode()
     print ' PCM type: %d' % a.inp.pcmtype()
 
   def reset(self):
-    self.data = []
     self.play_start = None
     self.recording = False
     self.paused = False
@@ -765,7 +743,7 @@ class Audio:
       self.stop()
 
     self.play_init()
-    if len(self.data) <= 0:
+    if len(self.lec.adats[-1]) <= 0:
       return
 
     self.pause()

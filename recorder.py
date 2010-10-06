@@ -8,6 +8,7 @@ import zlib    # to compress audio data in v0.1.x
 import speex   # to compress audio data in v0.2.x
 import wave
 import tarfile
+import tempfile
 from shutil import rmtree
 
 from datatypes import *
@@ -88,38 +89,29 @@ def load(fname, win_sz = (1,1)):
       return DCB(fname, DEFAULT_VERSION).load()
     elif fname.lower().endswith(".dcd"):
       return DCD(fname, DEFAULT_VERSION).load()
+    elif fname.lower().endswith(".dar"):
+      return DAR(fname, DEFAULT_VERSION).load()
     else:
       return _load_dcb(fname, win_sz)
   except FormatError as e:
     print 'FormatError:', str(e)
     return ()
 
-def save(fname, trace = None, audiofiles = [], req_v = DEFAULT_VERSION):
+def save(fname, lec = None, adats = [], req_v = DEFAULT_VERSION):
   '''Writes out a lecture and set of audio snippets to a file.'''
-  if trace is None: return
+  if lec is None: return
   if fname.lower().endswith(".dcx"):
-    _save_dcx(fname, trace, audiofiles, req_v)
+    _save_dcx(fname, lec, adats, req_v)
   elif fname.lower().endswith(".dct"):
-    _save_dct(fname, trace, audiofiles, req_v)
+    _save_dct(fname, lec, adats, req_v)
   elif fname.lower().endswith(".dcb"):
-    DCB(fname, req_v).save(trace, audiofiles)
+    DCB(fname, req_v).save(lec, adats)
   elif fname.lower().endswith(".dcd"):
-    DCD(fname, req_v).save(trace, audiofiles)
+    DCD(fname, req_v).save(lec, adats)
+  elif fname.lower().endswith(".dar"):
+    DAR(fname, req_v).save(lec, adats)
   else:
-    _save_dcb(fname, trace, audiofiles, req_v)
-
-
-
-############################################################################
-# -------------------------------- DAR ----------------------------------- #
-############################################################################
-
-def _save_dar(fname = "save.dar", lecture = None, adats = []):
-  '''Saves the thing into a DAR archive.'''
-  pass # TODO write me
-
-def _load_dar(fname = "save.dar"):
-  pass # TODO write me
+    _save_dcb(fname, lec, adats, req_v)
 
 
 
@@ -128,8 +120,10 @@ def _load_dar(fname = "save.dar"):
 ############################################################################
 
 class DCB(object):
-
+  '''Does Deskcorder Binary loading and saving.  Even after this format
+  becomes deprecated, its functions are still used in its subclasses.'''
   def __init__(self, fname, version):
+    '''Creates an empty DCB reader/writer.'''
     self.fname = fname
     self.v = version
     self.fp = None
@@ -512,6 +506,27 @@ class DCD(DCB):
       self.fp = None
       self.lec = None
       self.adats = []
+
+
+
+############################################################################
+# -------------------------------- DAR ----------------------------------- #
+############################################################################
+
+class DAR(DCD):
+  def __init__(self, fname, version):
+    self.fname = fname
+    self.v = version
+    self.fp = None
+    self.log = None
+
+  def save(self, lecture = None, adats = []):
+    '''Saves the thing into a DAR archive.'''
+    tempfile.mktemp(prefix='/home/jamoozy/.deskcorder/file-')
+    pass # TODO write me
+
+  def load(self):
+    pass # TODO write me
 
 
 
