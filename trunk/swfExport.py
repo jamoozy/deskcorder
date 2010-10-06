@@ -1,5 +1,5 @@
 from datatypes import *
-import recorder
+import fileio
 import swfOutput as swf
 #import linux # XXX not liking this ... should be agnostic
 import math
@@ -334,7 +334,7 @@ def swfExportNoAudio(lecture, fname):
   print
 
 def swfConvert(fname, outname):
-  lecture, a_data = recorder.load_dcb(fname)
+  lecture, a_data = fileio.load_dcb(fname)
 #  audio = linux.Audio()
 #  audio.load_data(a_data)
 #  return swfExportWithMP3(lecture, a_data, outname)

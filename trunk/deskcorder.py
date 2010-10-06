@@ -8,7 +8,7 @@ import os
 import signal
 from datatypes import *
 
-import recorder
+import fileio
 import exporter
 
 
@@ -115,7 +115,7 @@ class Main:
       self.gui.disable_progress_bar()
       try:
         self.audio.record()
-      except recorder.InvalidOperationError:
+      except fileio.InvalidOperationError:
         self.gui.record_pressed(False)
     else:
       self.gui.enable_progress_bar()
@@ -326,12 +326,12 @@ class Main:
   def save(self, fname = 'save.dcb'):
     if self.is_recording():
       self.record(False)
-    recorder.save(fname, self.lec, self.audio.make_data())
+    fileio.save(fname, self.lec, self.audio.make_data())
     self.gui.canvas.dirty = False
 
   def load(self, fname = 'save.dcb'):
     try:
-      rtn = recorder.load(fname)
+      rtn = fileio.load(fname)
       if len(rtn) > 0:
         self.lec = rtn[0]
         self.audio.load_data(rtn[1])
@@ -340,7 +340,7 @@ class Main:
         return True
       print 'Could not load', fname
       return False
-    except recorder.FormatError:
+    except fileio.FormatError:
       return False
 
 
@@ -502,14 +502,14 @@ if __name__ == '__main__':
 
   if config.export_fmt is not None:
     if config.export_fmt == 'swf':
-      lec, a = recorder.load(config.file_to_load)
+      lec, a = fileio.load(config.file_to_load)
       exporter.to_swf(lec, a, config.file_to_load[:-4] + '.swf')
     elif config.export_fmt == 'pdf':
-      lec, a = recorder.load(config.file_to_load)
+      lec, a = fileio.load(config.file_to_load)
       exporter.to_pdf(lec, config.file_to_load[:-4] + '.swf')
     elif config.export_fmt in ['dcd', 'dcb', 'dcx', 'dar', 'dct']:
-      lec, a = recorder.load(config.file_to_load)
-      recorder.save(config.file_to_load[:-3] + config.export_fmt, lec, a)
+      lec, a = fileio.load(config.file_to_load)
+      fileio.save(config.file_to_load[:-3] + config.export_fmt, lec, a)
     else:
       print 'Unknown flag "--exp-%s"' % config.export_fmt
     sys.exit(0)
