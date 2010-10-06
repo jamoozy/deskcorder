@@ -24,7 +24,7 @@ class Main:
     self.break_times = []
     self.last_pause = None
 
-    self.lec = Lecture(time.time())
+    self.lec = Lecture()
 
     self.audio = Audio(self)
     self.gui = GUI(self)
@@ -46,6 +46,12 @@ class Main:
     if not gui_enabled: print 'GUI disabled'
 
     self.progress = -1
+
+  def set_color(self, r, g, b):
+    self.lec.append(Color(time.time(), (r,g,b)))
+
+  def set_thickness(self, th):
+    self.lec.append(Thickness(time.time(), th))
 
   def is_empty(self):
     return self.lec.is_empty() and self.audio.is_empty()
@@ -94,6 +100,7 @@ class Main:
     self.gui.init()
     self.load_config(config)
     try:
+      self.lec.append(Start(time.time(), self.gui.get_size()))
       self.gui.run()
     except KeyboardInterrupt:
       pass
@@ -179,7 +186,7 @@ class Main:
       a_start = self.audio.get_current_audio_start_time()
       a_time = self.audio.get_s_played()
       if a_start > 0:
-        self.audio.play_tick(self.progress + self.lec.first().utime()())
+        self.audio.play_tick(self.progress + self.lec.first().utime())
         if a_time <= 0 and not self.gui.audio_wait_pressed():
           a_time = .01
         if a_time > 0:
@@ -202,17 +209,13 @@ class Main:
     #  2. When out iterator goes past the end of the lec object and we're
     #     out of audio, return false (stop calling this function).
     for e in self.it.next(self.progress):
-      if type(e) == Slide:
+      if isinstance(e, ScreenEvent):
         self.gui.canvas.clear()
-      elif type(e) == Click:
-        self.last_point = None
-      elif type(e) == Point:
-        if self.last_point is None:
-          self.gui.canvas.draw(self.it.state.color,
-              self.it.state.thickness * e.p, e.pos)
-        else:
-          self.gui.canvas.draw(self.it.state.color,
-              self.it.state.thickness * e.p, self.last_point.pos, e.pos)
+      elif isinstance(e, Click):
+        self.last_point = e
+      elif isinstance(e, Point):
+        self.gui.canvas.draw(self.it.state.color,
+            self.it.state.thickness * e.p, self.last_point.pos, e.pos)
         self.last_point = e
 
     if not self.it.has_next() and a_time < 0:

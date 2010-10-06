@@ -24,10 +24,8 @@ class Canvas(gtk.DrawingArea):
 
     self.radius = 3.0
     self.drawing = False
-    self.size = None
     self.raster = None
     self.raster_cr = None
-    self.color = (0.0, 0.0, 0.0)
     self.ttpt = -1
 
     # Keeps track of whether the state of the canvas is reflected in a file
@@ -50,7 +48,7 @@ class Canvas(gtk.DrawingArea):
                     gtk.gdk.BUTTON_RELEASE_MASK)
 
     self.connect("configure-event", lambda w, e: self.draw_all())
-    self.connect("expose-event", lambda w, e: self.gtk_expose())
+    self.connect("expose-event", lambda w, e: self._gtk_expose())
     self.connect("motion-notify-event", self.gtk_motion)
     self.connect("button-press-event", self.gtk_button_press)
     self.connect("button-release-event", self.gtk_button_release)
@@ -64,44 +62,42 @@ class Canvas(gtk.DrawingArea):
     self.frozen = False
 
   def draw_last_slide(self):
-    for event in self.dc.lec.last_slide():
-      if len(stroke) < 1: continue
-      elif len(stroke) < 2:
-        self.draw(stroke.color, stroke.thickness * stroke[0].p, stroke[0].pos)
-      elif len(stroke) < 3:
-        self.draw(stroke.color, stroke.thickness * stroke[1].p,
-            stroke[0].pos, stroke[1].pos)
-      else:
-        for i in xrange(len(stroke)-2):
-          self.draw(stroke.color, stroke.thickness * stroke[i+2].p,
-              stroke[i].pos, stroke[i+1].pos, stroke[i+2].pos)
+    it = self.dc.lec.last_slide_iter()
+    try:
+      last_point = it.next()
+      self.draw(it.state.color, it.state.thickness * last_point.p,
+          last_point.pos)
+      while True:
+        point = it.next()
+        self.draw(it.state.color, it.state.thickness * last_point.p,
+            last_point.pos, point.pos)
+        last_point = point
+    except StopIteration:
+      pass
 
   def draw_to_ttpt(self):
-    stroke = None
-    i = 0  # 1st slide (default)
-    for i in xrange(len(self.dc.lec)-1):
-      if self.dc.lec[i].t < self.ttpt and self.ttpt < self.dc.lec[i+1]:
-        stroke = self.dc.lec[i]
-        break
-
-    for stroke in self.dc.lec[i]:
-      if len(stroke) > 1:
-        if stroke[1].t < self.ttpt:
-          self.draw(stroke.color, stroke.thickness * stroke[0].p,
-              stroke[0].pos, stroke[1].pos)
-        for i in xrange(len(stroke)-2):
-          if stroke[i].t < self.ttpt:
-            self.draw(stroke.color, stroke.thickness * stroke[i].p,
-                stroke[i].pos, stroke[i+1].pos, stroke[i+2].pos)
-          else:
-            return
+    '''Draw all events leading up to the ttpt variable.'''
+    it = self.dc.lec.events_to_time(self.ttpt)
+    try:
+      last_point = it.next()
+      self.draw(it.state.color, it.state.thickness * last_point.p,
+          last_point.pos)
+      while True:
+        point = it.next()
+        self.draw(it.state.color, it.state.thickness * last_point.p,
+            last_point.pos, point.pos)
+        last_point = point
+    except StopIteration:
+      pass
 
   def draw_all(self):
-    self.size = self.window.get_size()
-    self.raster = self.window.cairo_create().get_target().create_similar(cairo.CONTENT_COLOR, self.size[0], self.size[1])
+    self.raster = self.window.cairo_create().get_target().create_similar(
+        cairo.CONTENT_COLOR, int(self.dc.lec.state.width()),
+                             int(self.dc.lec.state.height()))
     self.raster_cr = cairo.Context(self.raster)
     self.raster_cr.set_source_rgba(1.0, 1.0, 1.0, 1.0)
-    self.raster_cr.rectangle(0.0, 0.0, self.size[0], self.size[1])
+    self.raster_cr.rectangle(0.0, 0.0, self.dc.lec.state.width(),
+                                       self.dc.lec.state.height())
     self.raster_cr.fill()
     if self.ttpt >= 0:
       self.draw_to_ttpt()
@@ -116,57 +112,64 @@ class Canvas(gtk.DrawingArea):
     if p < 1e-5: p = None
     return default if default is not None and p is None else p
 
+  def _compute_normalized_pos(self, event):
+    pos = event.get_coords()
+    return (pos[0] / float(self.dc.lec.state.width()),
+            pos[1] / float(self.dc.lec.state.height()))
+
   def gtk_button_press(self, widget, event):
     if not self.frozen:
-      pos = event.get_coords()
-      pos = (pos[0] / float(self.size[0]), pos[1] / float(self.size[1]))
+      pos = self._compute_normalized_pos(event)
       self.dirty = True
       self.drawing = True
-      ratio = self.size[0] / float(self.size[1])
-      self.dc.lec.append(Point(time.time(), pos, 
-          self.get_pressure_or_default(event.device, .5)))
+      ratio = self.dc.lec.state.aspect_ratio()
+      self.dc.lec.append(Click(time.time(), pos))
 
   def gtk_motion(self, widget, event):
     if not self.frozen:
-      pos = event.get_coords()
-      pos = (pos[0] / float(self.size[0]), pos[1] / float(self.size[1]))
+      pos = self._compute_normalized_pos(event)
       if self.drawing:
         self.dirty = True
         p = self.get_pressure_or_default(event.device, .5)
         r = p * self.dc.lec.state.thickness
         points = self.dc.lec.last_points(2)
         if len(points) > 1:
-          self.draw(self.color, r, points[-2].pos, points[-1].pos, pos)
+          self.draw(self.dc.lec.state.color, r,
+              points[-2].pos, points[-1].pos, pos)
         elif len(points) > 0:
-          self.draw(self.color, r, points[-1].pos, pos)
+          self.draw(self.dc.lec.state.color, r,
+              points[-1].pos, pos)
         else:
-          self.draw(self.color, r, pos)
+          self.draw(self.dc.lec.state.color, r, pos)
         self.dc.lec.append(Point(time.time(), pos, p))
       else:
         self.dc.lec.append(Move(time.time(), pos))
 
   def gtk_button_release(self, widget, event):
     if not self.frozen:
+      pos = self._compute_normalized_pos(event)
       self.dirty = True
       self.drawing = False
       self.olderPos = None
       self.oldPos = None
       self.oldRad = None
+      self.dc.lec.append(Release(time.time(), pos))
 
-  def gtk_expose(self):
+  def _gtk_expose(self):
     cr = self.window.cairo_create()
     cr.set_source_surface(self.raster, 0.0, 0.0)
     cr.paint()
     cr.set_line_width(2)
     cr.set_source_rgba(0.0, 0.0, 0.0, 0.25)
-    cr.rectangle(0.0, 0.0, self.size[0], self.size[1])
+    cr.rectangle(0.0, 0.0, self.dc.lec.state.width(),
+                           self.dc.lec.state.height())
     cr.stroke()
 
   def set_radius(self, rad):
     self.radius = rad
 
   def setColor(self, r, g = None, b = None):
-    if type(r) == tuple and len(r) == 3:
+    if isinstance(r, tuple) and len(r) == 3:
       self.color = r
     elif g is None or b is None:
       raise AttributeError("sign. is setColor((r,g,b)) or setColor(r,g,b)")
@@ -174,9 +177,9 @@ class Canvas(gtk.DrawingArea):
       self.color = (r,g,b)
 
   def clear(self):
-    self.size = self.window.get_size()
     self.raster_cr.set_source_rgba(1.0, 1.0, 1.0, 1.0)
-    self.raster_cr.rectangle(0.0, 0.0, self.size[0], self.size[1])
+    self.raster_cr.rectangle(0.0, 0.0, self.dc.lec.state.width(),
+                                       self.dc.lec.state.height())
     self.raster_cr.fill()
     self.refresh()
     if not self.frozen:
@@ -184,12 +187,13 @@ class Canvas(gtk.DrawingArea):
 
   def refresh(self):
     reg = gtk.gdk.Region()
-    reg.union_with_rect((0, 0, self.size[0], self.size[1]))
+    reg.union_with_rect((0, 0, int(self.dc.lec.state.width()),
+                               int(self.dc.lec.state.height())))
     self.window.invalidate_region(reg, False)
 
   def reset(self):
     self.clear()
-    self.dc.lec = Lecture(time.time())
+    self.dc.lec = Lecture()
     self.positions = []
     self.dirty = False
     self.frozen = False
@@ -201,12 +205,14 @@ class Canvas(gtk.DrawingArea):
   def draw(self, color, r, pos1, pos2=None, pos3=None):
     self.raster_cr.set_source_rgba(color[0], color[1], color[2], 1.0)
     reg = gtk.gdk.Region()
-    r = r * math.sqrt(self.size[0]**2 + self.size[1]**2)
-    pos1 = (pos1[0] * self.size[0], pos1[1] * self.size[1])
+    r = r * math.sqrt(self.dc.lec.state.width()**2 + self.dc.lec.state.height()**2)
+    pos1 = (pos1[0] * self.dc.lec.state.width(), pos1[1] * self.dc.lec.state.height())
     if pos2 is not None:
-      pos2 = (pos2[0] * self.size[0], pos2[1] * self.size[1])
+      pos2 = (pos2[0] * self.dc.lec.state.width(),
+              pos2[1] * self.dc.lec.state.height())
     if pos3 is not None:
-      pos3 = (pos3[0] * self.size[0], pos3[1] * self.size[1])
+      pos3 = (pos3[0] * self.dc.lec.state.width(),
+              pos3[1] * self.dc.lec.state.height())
     if pos2 is None:
       self.raster_cr.set_line_width(0)
       self.raster_cr.arc(pos1[0], pos1[1], 0.5*r, 0.0, 2 * math.pi)
@@ -253,6 +259,8 @@ class ExportDialog(gtk.Dialog):
 
 class GUI:
   def __init__(self, dc):
+    self.dc = dc
+
     # Set up most of the window (from XML file).
     self.builder = gtk.Builder()
     self.builder.add_from_file('layout.gtk')
@@ -273,35 +281,35 @@ class GUI:
 
     # pen widths
     self["thin"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.set_radius(1.5))
+        lambda x: x.get_active() and self.dc.set_thickness(.005))
     self["medium"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.set_radius(3.0))
+        lambda x: x.get_active() and self.dc.set_thickness(.01))
     self["thick"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.set_radius(6.0))
+        lambda x: x.get_active() and self.dc.set_thickness(.02))
 
     # colors
     self["black"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setColor(0.0, 0.0, 0.0))
+        lambda x: x.get_active() and self.dc.set_color(0.0, 0.0, 0.0))
     self["blue"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setColor(0.0, 0.0, 1.0))
+        lambda x: x.get_active() and self.dc.set_color(0.0, 0.0, 1.0))
     self["red"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setColor(1.0, 0.0, 0.0))
+        lambda x: x.get_active() and self.dc.set_color(1.0, 0.0, 0.0))
     self["green"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setColor(0.0, 1.0, 0.0))
+        lambda x: x.get_active() and self.dc.set_color(0.0, 1.0, 0.0))
     self["gray"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setColor(0.5, 0.5, 0.5))
+        lambda x: x.get_active() and self.dc.set_color(0.5, 0.5, 0.5))
     self["cyan"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setColor(0.0, 1.0, 1.0))
+        lambda x: x.get_active() and self.dc.set_color(0.0, 1.0, 1.0))
     self["lime"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setColor(0.3, 1.0, 0.5))
+        lambda x: x.get_active() and self.dc.set_color(0.3, 1.0, 0.5))
     self["magenta"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setColor(1.0, 0.0, 1.0))
+        lambda x: x.get_active() and self.dc.set_color(1.0, 0.0, 1.0))
     self["orange"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setColor(1.0, 0.5, 0.0))
+        lambda x: x.get_active() and self.dc.set_color(1.0, 0.5, 0.0))
     self["yellow"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setColor(1.0, 1.0, 0.0))
+        lambda x: x.get_active() and self.dc.set_color(1.0, 1.0, 0.0))
     self["white"].connect("toggled",
-        lambda x: x.get_active() and self.canvas.setColor(1.0, 1.0, 1.0))
+        lambda x: x.get_active() and self.dc.set_color(1.0, 1.0, 1.0))
 
     self['root'].connect("delete-event", lambda x,y: gtk.main_quit())
 
@@ -327,6 +335,10 @@ class GUI:
 
   def __getitem__(self, key):
     return self.builder.get_object(key)
+
+  def get_size(self):
+    '''Returns a (width,height) tuple of the canvas size.'''
+    return self.canvas.window.get_size()
 
   def about_dialog(self):
     '''Shows the about dialog.'''
@@ -507,7 +519,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
   @staticmethod
   def add_filter(fcd, ft):
     '''Adds "filter tuple" ft to the fcd dialog.'''
-    if type(ft) != tuple:
+    if not isinstance(ft, tuple):
       raise RuntimeError('not a tuple, as expected')
     f = gtk.FileFilter()
     f.set_name(ft[0])
@@ -789,7 +801,7 @@ class Audio:
   def compress_data(self):
     '''Turns all list-type data into str-type.'''
     for i in xrange(len(self.data)):
-      if type(self.data[i][1]) == list:
+      if isinstance(self.data[i][1], list):
         for j in xrange(len(self.data[i][1]) - 1):
           k = j + 1
           while len(self.data[i][1][j]) < self.period_size:

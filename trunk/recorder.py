@@ -542,7 +542,7 @@ def _save_dcx(fname = 'save.dcx', lecture = [], audiofiles = [], req_v = DEFAULT
   f.write('<?xml version="1.0" encoding="UTF-8"?>\n')
   f.write('<document version="0.1.1">\n')
   for slide in lecture:
-    if type(slide) == float:
+    if isinstance(slide, float):
       f.write('  <slide cleartime="%lf">\n' % slide)
     else:
       for stroke in slide:
@@ -561,12 +561,12 @@ def _save_dcx(fname = 'save.dcx', lecture = [], audiofiles = [], req_v = DEFAULT
   for pos in positions:
     f.write('  <position x="%lf" y="%lf" time="%lf" />\n' %
         (pos[1][0] / float(pos[2][0]), pos[1][1] / float(pos[2][1]), pos[0]))
-  if type(audiofiles) == list:
+  if isinstance(audiofiles, list):
     for af in audiofiles:
       f.write('  <audiofile time="%lf" type="wav" encoding="base64">' % af[0])
       f.write(base64.b64encode(af[1]))
       f.write('</audiofile>\n')
-  elif type(audiofiles) == str:
+  elif isinstance(audiofiles, str):
     f.write('  <audiofile type="wav" encoding="base64">')
     f.write(base64.b64encode(audiofiles))
     f.write('</audiofile>\n')
@@ -624,7 +624,7 @@ def save_dcx_0(fname = "save.dcx", trace = [], position = [], audiofiles = []):
   output.write('<?xml version="1.0" encoding="UTF-8"?>\n')
   clears = []
   for clear in trace:
-    if type(clear) == float:
+    if isinstance(clear, float):
       clears.append(clear)
   output.write('<document>\n')
   output.write('  <clears type="array">\n')
@@ -633,7 +633,7 @@ def save_dcx_0(fname = "save.dcx", trace = [], position = [], audiofiles = []):
   output.write('  </clears>\n')
   output.write('  <slides type="array">\n')
   for slide in trace:
-    if type(slide) == list:
+    if isinstance(slide, list):
       output.write('    <slide>\n')
       output.write('      <curves type="array">\n')
       for curve in slide:
@@ -818,13 +818,13 @@ def _save_dct(fname = "save.dct", trace = [], positions = [], audiofiles = [], r
   output = open(fname, 'w')
   clears = []
   for clear in trace:
-    if type(clear) == float:
+    if isinstance(clear, float):
       clears.append(clear)
   for t in clears:
     output.write("%lf " % (1000*t))
   output.write("\n")
   for slide in trace:
-    if type(slide) == list:
+    if isinstance(slide, list):
       for curve in slide:
         for pt in curve:
           output.write("%d %d %lf %d %d %d %lf\n" % (pt[1][0]*640/pt[4][0], pt[1][1]*480/pt[4][1], 1000*pt[0], int(255*pt[3][0]), int(255*pt[3][1]), int(255*pt[3][2]), pt[2]))
