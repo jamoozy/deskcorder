@@ -24,9 +24,9 @@ class Main:
     self.break_times = []
     self.last_pause = None
 
-    self.lecture = Lecture(time.time())
+    self.lec = Lecture(time.time())
 
-    self.audio = Audio()
+    self.audio = Audio(self)
     self.gui = GUI(self)
 
     self.gui.connect_new(self.reset)
@@ -48,7 +48,7 @@ class Main:
     self.progress = -1
 
   def is_empty(self):
-    return self.lecture.is_empty() and self.audio.is_empty()
+    return self.lec.is_empty() and self.audio.is_empty()
 
   def all_buttons_off(self):
     self.gui.record_pressed(False)
@@ -57,29 +57,9 @@ class Main:
 
   def set_progress(self, val):
     self.progress = val
-    self.audio.set_progress(val + self.earliest_event_time())
-    self.gui.canvas.ttpt = val + self.earliest_event_time()
+    self.audio.set_progress(val + self.lec.first().utime())
+    self.gui.canvas.ttpt = val + self.lec.first().utime()
     self.it.seek(self.progress)
-
-  def get_duration(self):
-    start_t = self.earliest_event_time()
-    end_t = self.latest_event_time()
-    return (end_t - start_t) if start_t >= 0 and end_t >= 0 else .0
-
-  def earliest_event_time(self):
-    video_t = self.lecture.get_time_of_first_event()
-    audio_t = self.audio.get_time_of_first_event()
-    if audio_t >= 0 and video_t >= 0:
-      return min(audio_t, video_t)
-    elif video_t >= 0:
-      return video_t
-    else:
-      return audio_t
-
-  def latest_event_time(self):
-    video_t = self.lecture.get_time_of_last_event()
-    audio_t = self.audio.get_time_of_last_event()
-    return max(audio_t, video_t) if video_t >= 0 else audio_t
 
   def reset(self):
     '''Clears the state of the canvas and audio, as if the system had just
@@ -137,7 +117,7 @@ class Main:
   def is_playing(self):
     '''Determines if this is playing or not.'''
     # FIXME Adding one at the end is the same hack as below (in play_tick()).
-    return self.progress >= 0 and self.progress <= self.get_duration() + 1
+    return self.progress >= 0 and self.progress <= self.lec.duration() + 1
 
   def play(self, active):
     '''Start/stop playing what's in this file.'''
@@ -166,7 +146,7 @@ class Main:
     self.gui.canvas.freeze()
 
     # Playback iterators.
-    self.it = iter(self.lecture)
+    self.it = iter(self.lec)
 
     # prev & curr time play_tick() was called and progress in seconds.
     self.play_time = now
@@ -186,7 +166,7 @@ class Main:
       return False
     if self.is_paused():
       return True
-    if self.get_duration() <= 0:
+    if self.lec.duration() <= 0:
       return False
 
     # "normal" update
@@ -199,17 +179,17 @@ class Main:
       a_start = self.audio.get_current_audio_start_time()
       a_time = self.audio.get_s_played()
       if a_start > 0:
-        self.audio.play_tick(self.progress + self.earliest_event_time())
+        self.audio.play_tick(self.progress + self.lec.first().utime()())
         if a_time <= 0 and not self.gui.audio_wait_pressed():
           a_time = .01
         if a_time > 0:
-          self.progress = a_start + a_time - self.earliest_event_time()
+          self.progress = a_start + a_time - self.lec.first().utime()
     else:
       a_time = -1
 
     # updating GUI slider bar
-    self.gui.progress_slider_value(self.progress / self.get_duration())
-    self.gui.canvas.ttpt = self.progress + self.earliest_event_time()
+    self.gui.progress_slider_value(self.progress / self.lec.duration())
+    self.gui.canvas.ttpt = self.progress + self.lec.first().utime()
 
     # FIXME hack: I'm fixing the symptom, not the cause, here ...
     self.progress += 1
@@ -219,21 +199,20 @@ class Main:
     #     a. for each slide, clear the screen,
     #     b. for each stroke, start drawing a new stroke
     #     c. for each point, draw the point.
-    #  2. When out iterator goes past the end of the lecture object and we're
+    #  2. When out iterator goes past the end of the lec object and we're
     #     out of audio, return false (stop calling this function).
     for e in self.it.next(self.progress):
       if type(e) == Slide:
         self.gui.canvas.clear()
-      elif type(e) == Stroke:
+      elif type(e) == Click:
         self.last_point = None
-        self.stroke = e
       elif type(e) == Point:
         if self.last_point is None:
-          self.gui.canvas.draw(self.stroke.color,
-              self.stroke.thickness * e.p, e.pos)
+          self.gui.canvas.draw(self.it.state.color,
+              self.it.state.thickness * e.p, e.pos)
         else:
-          self.gui.canvas.draw(self.stroke.color,
-              self.stroke.thickness * e.p, self.last_point.pos, e.pos)
+          self.gui.canvas.draw(self.it.state.color,
+              self.it.state.thickness * e.p, self.last_point.pos, e.pos)
         self.last_point = e
 
     if not self.it.has_next() and a_time < 0:
@@ -292,7 +271,7 @@ class Main:
 
   def fmt_progress(self, val):
     '''Called by the GUI upon a request to redraw the progress label.'''
-    dur = self.get_duration()
+    dur = self.lec.duration()
     total = '%d:%02d' % (dur / 60, math.ceil(dur % 60))
     if self.is_empty():
       if self.gui.progress_slider_value() != 0:
@@ -317,7 +296,7 @@ class Main:
     else:
       self.gui.play_pressed(True)
       self.gui.pause_pressed(True)
-      self.set_progress(val * self.get_duration())
+      self.set_progress(val * self.lec.duration())
       self.gui.redraw()
 
 
@@ -328,30 +307,30 @@ class Main:
 
   def exp_png(self, fname, size, times):
     if fname.lower().endswith('.png'):
-      exporter.to_png(self.lecture, fname[:-4], size, times)
+      exporter.to_png(self.lec, fname[:-4], size, times)
     else:
-      exporter.to_png(self.lecture, fname, size, times)
+      exporter.to_png(self.lec, fname, size, times)
 
   def exp_pdf(self, fname, size, times):
     if fname.lower().endswith('.pdf'):
-      exporter.to_pdf(self.lecture, fname[:-4], size, times)
+      exporter.to_pdf(self.lec, fname[:-4], size, times)
     else:
-      exporter.to_pdf(self.lecture, fname, size, times)
+      exporter.to_pdf(self.lec, fname, size, times)
 
   def exp_swf(self, fname):
-    exporter.to_swf(self.lecture, self.audio.make_data(), fname)
+    exporter.to_swf(self.lec, self.audio.make_data(), fname)
 
   def save(self, fname = 'save.dcb'):
     if self.is_recording():
       self.record(False)
-    recorder.save(fname, self.lecture, self.audio.make_data())
+    recorder.save(fname, self.lec, self.audio.make_data())
     self.gui.canvas.dirty = False
 
   def load(self, fname = 'save.dcb'):
     try:
       rtn = recorder.load(fname)
       if len(rtn) > 0:
-        self.lecture = rtn[0]
+        self.lec = rtn[0]
         self.audio.load_data(rtn[1])
         self.gui.canvas.dirty = False
         self.gui.set_fname(fname)

@@ -10,35 +10,43 @@ This object is the representation of one run of the program.  It's called a
 ``Lecture'' because originally, that's what it was, a lecture---the time
 between when a professor or a TA started a class, to the time he or she ended
 it.  More generally, you can think of this as a ``session''.'''
-  class Iterator(object): def __init__(self, lec, offset = None):
-    class State(object):
-      def __init__(self):
-        self.color = (.0,.0,.0)
-        self.thickness = .01
-        self.win_sz = (1.,1.)
-
-      def aspect_ratio(self):
-        return self.win_sz[0] / float(self.win_sz[1])
-
+  class State(object):
     def __init__(self):
+      self.color = (.0,.0,.0)
+      self.thickness = .01
+      self.win_sz = (1.,1.)
+
+    def aspect_ratio(self):
+      return self.win_sz[0] / float(self.win_sz[1])
+
+    def width(self):
+      return self.win_sz[0]
+
+    def height(self):
+      return self.win_sz[1]
+
+  class Iterator(object):
+    def __init__(self, start_time, lec):
       self.lec = lec
-      self.state = Lecture.Iterator.State()
-      self.offset = lec.first.utime()
+      self.state = Lecture.State()
+      self.offset = start_time
       self.i = 0  # i is always the next to be returned.
                   # When i has passed the end of lec, we're done.
 
     def seek_to_time(self, prog):
+      '''Continue as though the last call to next() brought the iterator to
+      prog.'''
       abs_prog = self.offset + prog
       self.i = 0  # reset
       # Increment until we're at one before what should be the next one.
-      while self.lec.events[self.i].utime() <= abs_prog: self.i += 1
+      while self.events[self.i].utime() <= abs_prog: self.i += 1
 
     def seek(self, idx):
       '''Continue as though lecture[idx] is next.'''
       self.i = idx
 
     def has_next(self):
-      return self.lec.num_events() > self.i
+      return len(self.events) > self.i
 
     def _update_state(self, event):
       '''Updates the iterator state (the state of Deskcorder at the time
@@ -89,6 +97,7 @@ it.  More generally, you can think of this as a ``session''.'''
   def __init__(self, t = None):
     '''Initialize a blank state object.  If you have internal data (formerly
 known as a "trace"), then you can just pass that here.'''
+    self.state = Lecture.State() # keep track of line thickness, etc.
     self.events = []
     self.adats = []
     self.vdats = []  # XXX For a future release.
@@ -98,7 +107,7 @@ known as a "trace"), then you can just pass that here.'''
         % (len(self.events), len(self.adats), len(self.vdats))
 
   def __iter__(self):
-    return Lecture.Iterator(self)
+    return Lecture.Iterator(self.first().utime(), self.events)
 
   def __getitem__(self, i):
     return self.events[i]
@@ -119,6 +128,42 @@ known as a "trace"), then you can just pass that here.'''
   def last(self):
     '''Returns [] (not None) if empty so len() works.'''
     return self.events[-1] if len(self.events) > 0 else None
+
+  def last_points(self, max_num):
+    '''Returns an array of up to 'max_num' of the last point events.  If the
+    last event wasn't a point event, this will return [].'''
+    events = []
+    it = reversed(self.events)
+    try:
+      e = it.next()
+      if type(e) == Point:
+        events.append(e)
+      else:
+        return []
+      while len(events) < max_num:
+        e = it.next()
+        if type(e) != Point: raise StopIteration
+        events.append(e)
+    except StopIteration:
+      pass
+    events.reverse()
+    return events
+
+  def last_slide(self):
+    '''Convenience function that accumulates all the events between the last
+    clear (which may be the start of the lecture) and the end of the
+    lecture.'''
+    events = []
+    it = reversed(self.events)
+    try:
+      while True:
+        e = it.next()
+        events.append(e)
+        if type(e) == Start or type(e) == Clear: break
+    except StopIteration:
+      pass
+    events.reverse()
+    return events
 
   def num_events(self):
     return len(self.events)
@@ -149,7 +194,7 @@ class Event(object):
 
   def utime(self):
     '''Returns the time this data was created.''' 
-    raise self.t
+    return self.t
 
 class MouseEvent(Event):
   '''An event that has an (x,y) and time.'''
@@ -166,12 +211,12 @@ class MouseEvent(Event):
 class Move(MouseEvent):
   '''Undrawn point (the pen is up).'''
   def __init__(self, t, pos):
-    MouseEvent.__init__(self, pos, t)
+    MouseEvent.__init__(self, t, pos)
 
 class Point(MouseEvent):
   '''Drawn point (the pen is down).'''
   def __init__(self, t, pos, p):
-    MouseEvent.__init__(self, pos, t)
+    MouseEvent.__init__(self, t, pos)
     self.p = p  # \in [0,1] meaning no--full pressure
 
   def __str__(self):
@@ -180,7 +225,7 @@ class Point(MouseEvent):
 class Drag(MouseEvent):
   '''Dragging something across the screen.'''
   def __init__(self, t, pos, i):
-    MouseEvent.__init__(self, pos, t)
+    MouseEvent.__init__(self, t, pos)
     self.i = i  # "object ID" of what's being dragged
 
   def x(self):
@@ -204,8 +249,8 @@ class Release(MouseEvent):
   pass
 
 class MediaEvent(Event):
-  def __init__(self, t, i);
-  '''Creates a new MediaEvent with a pointer to the media it effected.'''
+  def __init__(self, t, i):
+    '''Creates a new MediaEvent with a pointer to the media it effected.'''
     Event.__init__(self, t)
     self.i = i
 
@@ -290,8 +335,12 @@ class Resize(Event):
 ############################################################################
 
 class Media(object):
-  def __init__(self):
-    self.files = []
+  def __init__(self, t):
+    self.data = []
+    self.t = t
+
+  def utime(self):
+    return self.t
 
 class AudioData(Media):
   '''Audio data.'''
@@ -302,10 +351,16 @@ class AudioData(Media):
   SPX = 2
   TYPES = [None] * 3
 
+  def __init__(self, t):
+    Media.__init__(self, t)
+
   def load_media(self, key, data):
     if key not in self.TYPES:
       raise Event.Error("Invalid data type key: %s" % key)
     self.files[key] = data
+
+  def __len__(self):
+    return 
 
 class VideoData(Media):
   '''Video data.'''
