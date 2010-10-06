@@ -137,17 +137,17 @@ def _to_swf_raw_audio(lecture, audio_data, fname):
       shape_extents = []
       oldStyles = styles[-1:] ; styles = []
       for e in it.next(prog):
-        if type(e) == Slide:
+        if isinstance(e, Slide):
           styles = []
           shapes = []
           for i in xrange(depth_count):
             swfOutput.append(swf.RemoveObject2(i+1))
           depth_count = 0
-        elif type(e) == Stroke:
+        elif isinstance(e, Stroke):
           styles.append(map(lambda x: int(255*x), (e.r(), e.g(), e.b())))
           thickness = e.thickness
           last_point = None
-        elif type(e) == Point:
+        elif isinstance(e, Point):
           x, y = int(e.x() * dims[0]), int(e.y() * dims[1])
           p = int(dimScale * thickness * e.p)
           if len(styles) == 0:
@@ -229,17 +229,17 @@ def _to_swf_no_audio(lecture, fname):
     prog = fnum / (float(SWF_FPS))
     oldStyles = styles[-1:] ; styles = []
     for e in it.next(prog):
-      if type(e) == Slide:
+      if isinstance(e, Slide):
         styles = []
         shapes = []
         for i in xrange(depth_count):
           swfOutput.append(swf.RemoveObject2(i+1))
         depth_count = 0
-      elif type(e) == Stroke:
+      elif isinstance(e, Stroke):
         styles.append(map(lambda x: int(255*x), (e.r(), e.g(), e.b())))
         thickness = e.thickness
         last_point = None
-      elif type(e) == Point:
+      elif isinstance(e, Point):
         x, y = int(e.x() * dims[0]), int(e.y() * dims[1])
         p = int(dimScale * thickness * e.p)
         if len(styles) == 0:

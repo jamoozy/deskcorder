@@ -1,3 +1,4 @@
+import time
 
 ##############################################################################
 # ----------------------------- State classes ------------------------------ #
@@ -26,12 +27,17 @@ it.  More generally, you can think of this as a ``session''.'''
       return self.win_sz[1]
 
   class Iterator(object):
-    def __init__(self, start_time, lec):
-      self.lec = lec
+    '''Iterates over the events in a Lecture object.'''
+    def __init__(self, events):
+      self.events = events
       self.state = Lecture.State()
-      self.offset = start_time
+      self.offset = events[0].utime() if len(events) > 0 else 0
       self.i = 0  # i is always the next to be returned.
                   # When i has passed the end of lec, we're done.
+
+    def __next__(self):
+      '''Implements the "default" iterator next() function.'''
+      return self.next()
 
     def seek_to_time(self, prog):
       '''Continue as though the last call to next() brought the iterator to
@@ -51,18 +57,18 @@ it.  More generally, you can think of this as a ``session''.'''
     def _update_state(self, event):
       '''Updates the iterator state (the state of Deskcorder at the time
       this event was made) based on the event.'''
-      if type(event) == Clear:
+      if isinstance(event, Clear):
         pass
-      elif type(event) == Thickness:
+      elif isinstance(event, Thickness):
         self.state.thickness = event.thickness
-      elif type(event) == Start:
-        self.state.win_sz = (event.w, event.h)
-      elif type(event) == Color:
-        self.color = event.color
+      elif isinstance(event, Start):
+        self.state.win_sz = (event.width(), event.height())
+      elif isinstance(event, Color):
+        self.state.color = event.color
 
     def peek(self):
       '''Return the next value without iterating.'''
-      return self.lec[self.i] if self.has_next() else None
+      return self.events[self.i] if self.has_next() else None
 
     def next(self, prog = None):
       '''Two modes of operation:
@@ -90,11 +96,12 @@ it.  More generally, you can think of this as a ``session''.'''
         elems = []
         while self.has_next():
           if self.peek().utime() > abs_prog: break
+          self._update_state(self.peek())
           elems.append(self.peek())
           self.i += 1
         return elems
 
-  def __init__(self, t = None):
+  def __init__(self):
     '''Initialize a blank state object.  If you have internal data (formerly
 known as a "trace"), then you can just pass that here.'''
     self.state = Lecture.State() # keep track of line thickness, etc.
@@ -107,7 +114,7 @@ known as a "trace"), then you can just pass that here.'''
         % (len(self.events), len(self.adats), len(self.vdats))
 
   def __iter__(self):
-    return Lecture.Iterator(self.first().utime(), self.events)
+    return Lecture.Iterator(self.events)
 
   def __getitem__(self, i):
     return self.events[i]
@@ -116,10 +123,16 @@ known as a "trace"), then you can just pass that here.'''
     return len(self.events)
 
   def append(self, e):
-    if type(e) == AudioRecord:
+    if isinstance(e, AudioRecord):
       self.adats.append(e.get_media())
-    elif type(e) == VideoRecord:
+    elif isinstance(e, VideoRecord):
       self.vdats.append(e.get_media())
+    elif isinstance(e, ScreenEvent):
+      self.state.win_sz = e.size
+    elif isinstance(e, Color):
+      self.state.color = e.color
+    elif isinstance(e, Thickness):
+      self.state.thickness = e.thickness
     self.events.append(e)
 
   def first(self):
@@ -136,18 +149,25 @@ known as a "trace"), then you can just pass that here.'''
     it = reversed(self.events)
     try:
       e = it.next()
-      if type(e) == Point:
+      if isinstance(e, Point):
         events.append(e)
       else:
         return []
       while len(events) < max_num:
         e = it.next()
-        if type(e) != Point: raise StopIteration
+        if isinstance(e, Point): raise StopIteration
         events.append(e)
     except StopIteration:
       pass
     events.reverse()
     return events
+
+  def last_slide_iter(self):
+    '''Returns an iterator pointing to the first element of the last slide.'''
+    it = Lecture.Iterator(self.last_slide())
+    # FIXME ^_^
+    # TODO Compute what the state was at that point.
+    return it
 
   def last_slide(self):
     '''Convenience function that accumulates all the events between the last
@@ -158,12 +178,45 @@ known as a "trace"), then you can just pass that here.'''
     try:
       while True:
         e = it.next()
+        if isinstance(e, Start) or isinstance(e, Clear): raise StopIteration
         events.append(e)
-        if type(e) == Start or type(e) == Clear: break
     except StopIteration:
       pass
     events.reverse()
     return events
+
+  def events_to_time(self, t):
+    '''Get all the events from the start of the slide that was active during
+    time t up to and including the event with utime() == t.'''
+    if len(self.events) <= 0: return []
+
+    # Iterator and amount to change it on fail.
+    i = len(self.events) / 2
+    di = len(self.events) / 4
+
+    # binary search to find element with utime() at point
+    while self.events[i].utime() != t and di > 0:
+      if self.events[i].utime() > t:
+        i += di
+      else:
+        i -= di
+      di /= 2    # Next time, only jump half.
+
+    if i == 0: return [self.events[i]]
+
+    events = [self.events[i]]  # what to return
+    i -= 1
+
+    # reverse linear "search" for first appearance of a clear screen-type of
+    # event
+    while isinstance(self.events[i], Clear) or isinstance(self.events[i], Start):
+      events.append(self.events[i])
+      i -= 1
+
+    # TODO Include state.
+    events.reverse()
+    it = Lecture.Iterator(events)
+    return it
 
   def num_events(self):
     return len(self.events)
@@ -270,14 +323,14 @@ class AudioRecord(MediaRecordEvent):
   '''Microphone started recording.'''
   def __init__(self, t, i, media):
     MediaRecordEvent.__init__(self, t, i, media)
-    if type(media) != AudioData:
+    if isinstance(media, AudioData):
       raise Event.Error("Data should be AudioData, not %s" % type(media))
 
 class VideoRecord(MediaRecordEvent):
   '''Something (A/V) stopped recording.'''
   def __init__(self, t, i, media):
     MediaEvent.__init__(self, t, i, media)
-    if type(media) != VideoData:
+    if isinstance(media, VideoData):
       raise Event.Error("Data should be VideoData, not %s" % type(media))
 
 class Clear(Event):
@@ -307,31 +360,37 @@ class Thickness(Event):
     Event.__init__(self, t)
     self.thickness = thickness
 
-class Start(Event):
-  '''The program was started.'''
-  def __init__(self, t, ar):
+class ScreenEvent(Event):
+  '''Size-based event (event that affects the screen, only).'''
+  def __init__(self, t, size):
     Event.__init__(self, t)
-    self.aspect_ratio = ar
+    self.size = size
 
-class End(Event):
-  '''The program was ended.'''
-  def __init__(self, t):
-    Event.__init__(self, t)
+  def width(self):
+    return self.size[0]
 
-class Resize(Event):
-  '''The screen was resized.'''
-  def __init__(self, t, w, h):
-    Event.__init__(self, t)
-    self.w = w
-    self.h = h
+  def height(self):
+    return self.size[1]
 
   def aspect_ratio(self):
-    return self.w / float(self.h)
+    return self.width() / float(self.height())
+
+class Start(ScreenEvent):
+  '''The program was started.'''
+  pass
+
+class End(ScreenEvent):
+  '''The program was ended.'''
+  pass
+
+class Resize(ScreenEvent):
+  '''The screen was resized.'''
+  pass
 
 
 
 ############################################################################
-# --------------------- ?
+# -------------------- Media (Audio and Video data) ---------------------- #
 ############################################################################
 
 class Media(object):
