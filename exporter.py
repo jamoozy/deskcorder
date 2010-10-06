@@ -1,7 +1,7 @@
 import math
 import cairo
 from datatypes import *
-import recorder
+import fileio
 import swfOutput as swf
 #import linux # XXX not liking this ... should be agnostic
 import sys
@@ -322,9 +322,9 @@ def _load_from_file(fname):
   return times
 
 if __name__ == "__main__":
-  import sys, recorder
+  import sys, fileio
   iname = sys.argv[1]
-  trace,audio = recorder.load(iname)
+  trace,audio = fileio.load(iname)
   oname = iname[:-4] if iname[:-1].lower().endswith('.dc') else iname
   times = _load_from_file(sys.argv[2]) if len(sys.argv) == 3 else None
   if times is not None:
