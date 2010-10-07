@@ -366,12 +366,13 @@ class DCB(object):
             self.lec.last(Resize).t = t
             self.lec.last(Thickness).t = t
         self.lec.last(Color)
+        self.num_points = 0
         for point_i in xrange(1, num_points-1):
           self.log.write("      point %d\n" % point_i)
           self._load_point()
         self._load_release()
       if self.v[1] < 2:  # finish pre-v0.2 conversion.
-        self.lec.last(Thickness).thickness = self.s_thickness / len(self.lec.last().last())
+        self.lec.state.thickness = self.s_thickness / float(self.num_points)
     else:
       self.log.write('    Empty stroke!\n')
 
@@ -392,6 +393,7 @@ class DCB(object):
       # if this is a previous version, "fake" the correct way of doing
       # thickness/pressure for the stroke/points.
       self.s_thickness += th_pr
+      self.num_points += 1
       th_pr = 1.
     if self.v == (0,1,1) or self.v[1] == 2:
       self.lec.append(Point(ts / 1000.0, (x, y), th_pr))

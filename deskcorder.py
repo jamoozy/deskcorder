@@ -101,6 +101,7 @@ class Main:
     self.load_config(config)
     try:
       self.lec.append(Start(time.time(), self.gui.get_size()))
+      self.gui.canvas.draw_all()  # Some arch's need this or nothing is shown.
       self.gui.run()
     except KeyboardInterrupt:
       pass
@@ -331,15 +332,8 @@ class Main:
 
   def load(self, fname = 'save.dcb'):
     try:
-      rtn = fileio.load(fname)
-      if len(rtn) > 0:
-        self.lec = rtn[0]
-        self.audio.load_data(rtn[1])
-        self.gui.canvas.dirty = False
-        self.gui.set_fname(fname)
-        return True
-      print 'Could not load', fname
-      return False
+      self.lec = fileio.load(fname)
+      return True
     except fileio.FormatError:
       return False
 
