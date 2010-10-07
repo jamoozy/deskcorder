@@ -179,7 +179,7 @@ known as a "trace"), then you can just pass that here.'''
     tevent = self.last(Thickness)
     if tevent is not None: it.state.thickness = tevent.thickness
     cevent = self.last(Color)
-    if cevent is not None: it.state.color = tcolor.color
+    if cevent is not None: it.state.color = cevent.color
     sevent = self.last(ScreenEvent)
     if sevent is not None: it.state.win_sz = sevent.size
     return it
