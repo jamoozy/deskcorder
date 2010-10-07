@@ -64,14 +64,17 @@ class Canvas(gtk.DrawingArea):
   def draw_last_slide(self):
     it = self.dc.lec.last_slide_iter()
     try:
-      last_point = it.next()
-      self.draw(it.state.color, it.state.thickness * last_point.p,
-          last_point.pos)
+      last_point = None
       while True:
         point = it.next()
-        self.draw(it.state.color, it.state.thickness * last_point.p,
-            last_point.pos, point.pos)
-        last_point = point
+        if isinstance(point, Point):
+          if last_point is None:
+            self.draw(it.state.color, it.state.thickness * point.p,
+                point.pos)
+          else:
+            self.draw(it.state.color, it.state.thickness * last_point.p,
+                last_point.pos, point.pos)
+          last_point = point
     except StopIteration:
       pass
 

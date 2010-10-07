@@ -14,7 +14,7 @@ from shutil import rmtree
 from datatypes import *
 
 # Valid version numbers (ones we can load)
-VALID_VERSIONS = [(0,1,0), (0,1,1), (0,1,2), (0,2,0)]
+VALID_VERSIONS = [(0,1,0), (0,1,1), (0,1,2), (0,2,0), (0,3,0)]
 
 # Currently-supported formats.
 FORMATS = {'dcx': "Deskcorder XML file",
@@ -22,7 +22,7 @@ FORMATS = {'dcx': "Deskcorder XML file",
            'dcb': "Deskcorder binary file"}
 
 # Current default version.
-DEFAULT_VERSION = (0,2,0)
+DEFAULT_VERSION = (0,3,0)
 
 # Magic number to appear at the beginning of every DCB file.
 MAGIC_NUMBER = '\x42\xfa\x32\xba\x22\xaa\xaa\xbb'
@@ -97,21 +97,21 @@ def load(fname, win_sz = (1,1)):
     print 'FormatError:', str(e)
     return ()
 
-def save(fname, lec = None, adats = [], req_v = DEFAULT_VERSION):
+def save(fname, lec = None, req_v = DEFAULT_VERSION):
   '''Writes out a lecture and set of audio snippets to a file.'''
   if lec is None: return
   if fname.lower().endswith(".dcx"):
-    _save_dcx(fname, lec, adats, req_v)
+    _save_dcx(fname, lec, req_v)
   elif fname.lower().endswith(".dct"):
-    _save_dct(fname, lec, adats, req_v)
+    _save_dct(fname, lec, req_v)
   elif fname.lower().endswith(".dcb"):
-    DCB(fname, req_v).save(lec, adats)
+    DCB(fname, req_v).save(lec)
   elif fname.lower().endswith(".dcd"):
-    DCD(fname, req_v).save(lec, adats)
+    DCD(fname, req_v).save(lec)
   elif fname.lower().endswith(".dar"):
-    DAR(fname, req_v).save(lec, adats)
+    DAR(fname, req_v).save(lec)
   else:
-    _save_dcb(fname, lec, adats, req_v)
+    _save_dcb(fname, lec, req_v)
 
 
 
@@ -129,53 +129,56 @@ class DCB(object):
     self.fp = None
     self.log = None
     self.lec = None
-    self.adats = []
 
-  def save(self, lec = None, adats = []):
-    '''Writes a lecture and audio data to a file.'''
-    if lec is None:
-      return
-    if self.v != DEFAULT_VERSION:
-      raise VersionError(self.v)
+  def _write_bin_data(self, fmt, *args):
+    self.fp.write(struct.pack(fmt, *args))
 
-    self.fp = open(self.fname, 'wb')
-    self.log = open(self.fname + ".save_log", 'w')
-
-    self.lec = lec
-    self.adats = adats
-
-    # --- header ---
-    self.fp.write(DCB.MAGIC_NUMBER)
-    self.fp.write(struct.pack("<III", self.v[0], self.v[1], self.v[2]))
-    self.log.write("File version: (%d,%d,%d)\n" % self.v)
-    if self.v[1] >= 2:
-      self.fp.write(struct.pack("<f", lec.aspect_ratio))
-      self.log.write('File has %d slides, ar = %.2f\n' \
-          % (len(lec.slides), lec.aspect_ratio))
-    else:
-      self.log.write('File will have %d slides\n' % len(lec.slides))
-
-    # --- slides ---
-    self.fp.write(struct.pack("<I", len(lec)))
-    for slide in lec.slides:  # Slide block
-      self._save_slide(slide)
-
-    # --- moves ---
-    self.fp.write(struct.pack("<I", len(lec.moves)))  # number of moves sans mouse click
-    self.log.write('%d positions\n' % len(lec.moves))
-    self.log.flush()
-    for m in lec.moves:
-      self._save_move(m)
-
-    # --- audio ---
-    self.fp.write(struct.pack("<I", len(adats))) # number of audio files
-    for af in self.adats:
-      self._save_audio(af)
-
-    self.fp.close()
-    self.fp = None
-    self.log.close()
-    self.log = None
+#  XXX Deprecated.
+#  def save(self, lec = None):
+#    '''Writes a lecture and audio data to a file.'''
+#    if lec is None:
+#      return
+#    if self.v != DEFAULT_VERSION:
+#      raise VersionError(self.v)
+#
+#    self.fp = open(self.fname, 'wb')
+#    self.log = open(self.fname + ".save_log", 'w')
+#
+#    self.lec = lec
+#
+#    # --- header ---
+#    self.fp.write(MAGIC_NUMBER)
+#    self._write_bin_data("<III", self.v[0], self.v[1], self.v[2])
+#    #self.fp.write(struct.pack("<III", self.v[0], self.v[1], self.v[2]))
+#    self.log.write("File version: (%d,%d,%d)\n" % self.v)
+#    if self.v[1] >= 2:
+#      self.fp.write(struct.pack("<f", lec.aspect_ratio))
+#      self.log.write('File has %d slides, ar = %.2f\n' \
+#          % (len(lec.slides), lec.aspect_ratio))
+#    else:
+#      self.log.write('File will have %d slides\n' % len(lec.slides))
+#
+#    # --- slides ---
+#    self.fp.write(struct.pack("<I", len(lec)))
+#    for slide in lec.slides:  # Slide block
+#      self._save_slide(slide)
+#
+#    # --- moves ---
+#    self.fp.write(struct.pack("<I", len(lec.moves)))  # number of moves sans mouse click
+#    self.log.write('%d positions\n' % len(lec.moves))
+#    self.log.flush()
+#    for m in lec.moves:
+#      self._save_move(m)
+#
+#    # --- audio ---
+#    self.fp.write(struct.pack("<I", len(self.lec.adats))) # number of audio files
+#    for af in self.lec.adats:
+#      self._save_audio(af)
+#
+#    self.fp.close()
+#    self.fp = None
+#    self.log.close()
+#    self.log = None
 
   def _save_slide(self, slide):
     '''Writes a slide to file in DCB format.'''
@@ -202,6 +205,13 @@ class DCB(object):
       for point in stroke.points:
         self._save_point(point)
 
+  def _save_click(self, click):
+    self.fp.write(struct.pack("<Qff", click.utime() * 1000,
+        click.x(), click.y()))
+    self.log.write("    click (%.3f,%.3f) @ %.1f\n" \
+        % (click.pos + click.utime()))
+    self.log.flush()
+
   def _save_point(self, point):
     '''Writes a point to file in DCB format.'''
     if self.v == (0,1,2):
@@ -211,6 +221,13 @@ class DCB(object):
     self.fp.write(struct.pack("<Qfff", point.t * 1000, point.x(), point.y(), thickness))
     self.log.write('    point (%.3f,%.3f) @ %.1f with %.2f%%\n' \
         % (point.x(), point.y(), point.t, thickness * 100))
+    self.log.flush()
+
+  def _save_release(self, rel):
+    self.fp.write(struct.pack("<Qff", rel.utime() * 1000,
+        rel.x(), rel.y()))
+    self.log.write("    release (%.3f,%.3f) @ %.1f\n" \
+        % (rel.pos + rel.utime()))
     self.log.flush()
 
   def _save_move(self, move):
@@ -277,9 +294,13 @@ class DCB(object):
       for pos_i in xrange(num_moves):
         self.log.write('  move %d\n' % pos_i)
         self.log.flush()
-        self._load_move()
+        self._load_move()  # out of order!
+        for i in reversed(xrange(len(self.lec))):  # TODO optimize
+          if self.lec[-1].utime() < self.lec[i].utime():
+            break
+        self.lec.events.insert(i, self.lec.events.pop())
 
-      self.adats = []
+      self.lec.adats = []
       if self.v != (0,1,0):
         # number of audio files
         self.log.write("We're at self.fp.tell():%d\n" % self.fp.tell())
@@ -293,12 +314,11 @@ class DCB(object):
     self.fp.close()
     self.log.close()
     try:
-      return self.lec, self.adats
+      return self.lec
     finally:
       self.fp = None
       self.log = None
       self.lec = None
-      self.adats = []
 
   def _load_slide(self):
     # tstamp of "clear" (ms), number of strokes in first slide
@@ -307,7 +327,7 @@ class DCB(object):
     self.log.write('    %d strokes at %.1fs\n' \
         % (num_strokes, t / 1000.))
     self.log.flush()
-    self.lec.append(t / 1000.)
+    self.lec.append(Clear(t / 1000., (800,600)))
     for stroke_i in xrange(num_strokes):
       self.log.write("  stroke %d\n" % stroke_i)
       self.log.flush()
@@ -318,8 +338,9 @@ class DCB(object):
     self.log.write("    We're at self.fp.tell():%d\n" % self.fp.tell())
     num_points = DCB.bin_read(self.fp, "<I")[0]
     if num_points > 0:
-      if self.v[1] >= 2:
+      if self.v == (0,2,0):
         aspect_ratio, thickness = DCB.bin_read(self.fp, "<ff")
+        self.log.write('        as_ra: %.2f\n' % aspect_ratio)
         self.log.write('    thickness: %.2f\n' % thickness)
         self.log.flush()
       else:
@@ -329,17 +350,37 @@ class DCB(object):
       self.log.write('    %d points with (%.1f,%.1f,%.1f)\n' \
           % ((num_points,) + color))
       self.log.flush()
-      if self.v[1] >= 2:
-        self.lec.last().append(Stroke(color, aspect_ratio, thickness))
+      if self.v[1] == 2:
+        self.lec.append(Color(-1, color))
+        self.lec.append(Resize(-1, (aspect_ratio * 600, 800 / aspect_ratio)))  # guess it's 800x600
+        self.lec.append(Thickness(-1, thickness))
       else:
-        self.lec.last().append(color)
-      for point_i in xrange(num_points):
-        self.log.write("      point %d\n" % point_i)
-        self._load_point()
-    if self.v[1] < 2:  # finish pre-v0.2 conversion.
-      self.lec.last().last().thickness = self.s_thickness / len(self.lec.last().last())
+        self.lec.append(Color(-1, color))
+      if num_points >= 0:
+        self.log.write("      click\n")
+        self._load_click()
+        t = self.lec.last(Click).utime()
+        if self.v[1] <= 2:   # "correcting"
+          self.lec.last(Color).t = t
+          if self.v[1] == 2:
+            self.lec.last(Resize).t = t
+            self.lec.last(Thickness).t = t
+        self.lec.last(Color)
+        for point_i in xrange(1, num_points-1):
+          self.log.write("      point %d\n" % point_i)
+          self._load_point()
+        self._load_release()
+      if self.v[1] < 2:  # finish pre-v0.2 conversion.
+        self.lec.last(Thickness).thickness = self.s_thickness / len(self.lec.last().last())
     else:
       self.log.write('    Empty stroke!\n')
+
+  def _load_click(self):
+    if self.v[1] < 3:
+      ts, x, y, th_pr = DCB.bin_read(self.fp, "<Qfff")
+    else:
+      ts, x, y = DCB.bin_read(self.fp, "<Qff")
+    self.lec.append(Click(ts / 1000.0, (x, y)))
 
   def _load_point(self):
     # timestamp (ms), x, y, "thickness"
@@ -353,17 +394,26 @@ class DCB(object):
       self.s_thickness += th_pr
       th_pr = 1.
     if self.v == (0,1,1) or self.v[1] == 2:
-      self.lec[-1][-1].append((x, y), ts / 1000.0, th_pr)
+      self.lec.append(Point(ts / 1000.0, (x, y), th_pr))
     elif self.v == (0,1,2):
-      self.lec[-1][-1].append((x, y), ts / 1000.0, th_pr * math.sqrt(2))
+      self.lec.append(Point(ts / 1000.0, (x, y), th_pr * math.sqrt(2)))
+
+  def _load_release(self):
+    if self.v[1] < 3:
+      ts, x, y, th_pr = DCB.bin_read(self.fp, "<Qfff")
+    else:
+      ts, x, y = DCB.bin_read(self.fp, "<Qff")
+    self.lec.append(Release(ts / 1000.0, (x, y)))
+    self.log.write("      release (%.3f,%.3f) @ %.1f\n" % (x, y, ts / 1000.0))
+    self.log.flush()
 
   def _load_move(self):
     # tstamp (ms), x, y
     self.log.write(  "We're at self.fp.tell():%d\n" % self.fp.tell())
-    t, x, y = DCB.bin_read(self.fp, "<Qff")
-    self.log.write('    (%.3f,%.3f) @ %.1fs\n' % (x, y, t / 1000.))
+    ts, x, y = DCB.bin_read(self.fp, "<Qff")
+    self.log.write('    (%.3f,%.3f) @ %.1fs\n' % (x, y, ts / 1000.))
     self.log.flush()
-    self.lec.add_move((x, y), t / 1000.)
+    self.lec.append(Move(ts / 1000.0, (x, y)))
 
   def _load_audio(self):
     '''Appends the audio entry at 'self.fp' to 'self.adats'.'''
@@ -373,12 +423,22 @@ class DCB(object):
     self.log.write('    %d bytes at %.1fs\n' % (sz, t / 1000.))
     self.log.flush()
     # data
+    adat = AudioData(t / 1000.0)
+    cdat = self.fp.read(sz)
     if self.v[1] == 1:
-      adat = [t / 1000, zlib.decompress(self.fp.read(sz))]
+      adat.add_type(AudioData.ZLB, cdat)
+      raw_dat = zlib.decompress(cdat)
     elif self.v[1] == 2:
+      adat.add_type(AudioData.SPX, cdat)
       s = speex.new(raw = True)
-      adat = [t / 1000, s.decode(self.fp.read(sz))]
-    self.adats.append(adat)
+      raw_dat = s.decode(cdat)
+    adat.add_type(AudioData.RAW, raw_dat)
+    ar = AudioRecord(t / 1000.0, len(self.lec.adats), adat)
+    self.lec.adats.append(adat)
+    for i in reversed(xrange(len(self.lec))):  # TODO optimize
+      if self.lec[-1].utime() < self.lec[i].utime():
+        break
+    self.lec.events.insert(i, ar)
 
 
 
@@ -390,15 +450,14 @@ class DCD(DCB):
   def __init__(self, fname, version):
     DCB.__init__(self, fname, version)
 
-  def save(self, lecture = None, adats = []):
+  def save(self, lec = None):
     if os.path.exists(self.fname):
       if os.path.isdir(self.fname):
         rmtree(self.fname)
       else:
         os.remove(self.fname)
 
-    self.lec = lecture
-    self.adats = adats
+    self.lec = lec
 
     os.mkdir(self.fname)
     self.fp = open(os.path.join(self.fname, "metadata"), "w")
@@ -426,7 +485,7 @@ class DCD(DCB):
         self.fp.close()
 
     i = 0
-    for adat in self.adats:
+    for adat in self.lec.adats:
       i += 1
       fname = os.path.join(self.fname, "audio%03d" % i)
       self.fp = open(fname, "w")
@@ -439,7 +498,6 @@ class DCD(DCB):
     self.log = None
     self.fp = None
     self.lec = None
-    self.adats = None
 
   def load(self):
     if not os.path.exists(self.fname):
@@ -489,7 +547,7 @@ class DCD(DCB):
         self.fp.close()
 
     # Populate it with audio data.
-    adats = []
+    self.lec.adats = []
     for afile in info[2]:
       if afile.endswith('~') or afile.endswith(".txt"): continue
       afile_name = os.path.join(self.fname, afile)
@@ -500,12 +558,11 @@ class DCD(DCB):
 
     self.log.close()
     try:
-      return self.lec, self.adats
+      return self.lec
     finally:
       self.log = None
       self.fp = None
       self.lec = None
-      self.adats = []
 
 
 
@@ -520,7 +577,7 @@ class DAR(DCD):
     self.fp = None
     self.log = None
 
-  def save(self, lecture = None, adats = []):
+  def save(self, lec = None):
     '''Saves the thing into a DAR archive.'''
     tempfile.mktemp(prefix='/home/jamoozy/.deskcorder/file-')
     pass # TODO write me
