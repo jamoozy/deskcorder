@@ -47,7 +47,7 @@ class Canvas(gtk.DrawingArea):
                     gtk.gdk.BUTTON_PRESS_MASK |
                     gtk.gdk.BUTTON_RELEASE_MASK)
 
-    self.connect("configure-event", lambda w, e: self.draw_all())
+    self.connect("configure-event", lambda w, e: self._configure())
     self.connect("expose-event", lambda w, e: self._gtk_expose())
     self.connect("motion-notify-event", self.gtk_motion)
     self.connect("button-press-event", self.gtk_button_press)
@@ -92,6 +92,10 @@ class Canvas(gtk.DrawingArea):
         last_point = point
     except StopIteration:
       pass
+
+  def _configure(self):
+    self.dc.lec.resize(self.window.get_size())
+    self.draw_all()
 
   def draw_all(self):
     self.raster = self.window.cairo_create().get_target().create_similar(
@@ -341,6 +345,8 @@ class GUI:
 
   def get_size(self):
     '''Returns a (width,height) tuple of the canvas size.'''
+    print 'window size:', self.canvas.window.get_size()
+    print '       size:', self['root'].get_size()
     return self.canvas.window.get_size()
 
   def about_dialog(self):
@@ -697,6 +703,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
 
   def init(self):
     self['root'].show()
+    self.canvas._configure()  # Some arch's need this or nothing is shown.
 
   def run(self):
     gtk.main()

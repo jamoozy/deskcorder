@@ -352,7 +352,7 @@ class DCB(object):
       self.log.flush()
       if self.v[1] == 2:
         self.lec.append(Color(-1, color))
-        self.lec.append(Resize(-1, (aspect_ratio * 600, 800 / aspect_ratio)))  # guess it's 800x600
+        self.lec.resize((aspect_ratio * 600, 800 / aspect_ratio))  # guess it's 800x600
         self.lec.append(Thickness(-1, thickness))
       else:
         self.lec.append(Color(-1, color))

@@ -128,12 +128,23 @@ known as a "trace"), then you can just pass that here.'''
     elif isinstance(e, VideoRecord):
       self.vdats.append(e.get_media())
     elif isinstance(e, ScreenEvent):
-      self.state.win_sz = e.size
+      print "Warning: I'd prefer you use Lecture.resize((w,h)) \
+          to Lecture.append(Resize(t,(w,h)))"
+      self.resize(e.size)
+      return
     elif isinstance(e, Color):
       self.state.color = e.color
     elif isinstance(e, Thickness):
       self.state.thickness = e.thickness
     self.events.append(e)
+
+  def resize(self, size):
+    '''Registers with the lecture that the canvas has been resized.'''
+    if isinstance(self.last(), ScreenEvent):
+      self.last().size = size
+    else:
+      self.events.append(Resize(time.time(), size))
+    self.state.win_sz = size
 
   def first(self):
     return self.events[0] if len(self.events) else None
