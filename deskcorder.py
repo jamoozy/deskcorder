@@ -101,7 +101,6 @@ class Main:
     self.load_config(config)
     try:
       self.lec.append(Start(time.time(), self.gui.get_size()))
-      self.gui.canvas.draw_all()  # Some arch's need this or nothing is shown.
       self.gui.run()
     except KeyboardInterrupt:
       pass
