@@ -138,9 +138,20 @@ known as a "trace"), then you can just pass that here.'''
   def first(self):
     return self.events[0] if len(self.events) else None
 
-  def last(self):
-    '''Returns [] (not None) if empty so len() works.'''
-    return self.events[-1] if len(self.events) > 0 else None
+  def last(self, typ = None):
+    '''Gets the last event.  If typ is specified, gets the last event with
+    type typ.  If there is no event with type = typ or the lecture is empty,
+    returns None.'''
+    if len(self.events) <= 0: return None
+    if typ is None:
+      return self.events[-1]
+    else:
+      i = -1
+      try:  # search backward for type
+        while not isinstance(self.events[i], typ): i -= 1
+      except IndexError:
+        return None
+      return self.events[i]
 
   def last_points(self, max_num):
     '''Returns an array of up to 'max_num' of the last point events.  If the
@@ -165,8 +176,12 @@ known as a "trace"), then you can just pass that here.'''
   def last_slide_iter(self):
     '''Returns an iterator pointing to the first element of the last slide.'''
     it = Lecture.Iterator(self.last_slide())
-    # FIXME ^_^
-    # TODO Compute what the state was at that point.
+    tevent = self.last(Thickness)
+    if tevent is not None: it.state.thickness = tevent.thickness
+    cevent = self.last(Color)
+    if cevent is not None: it.state.color = tcolor.color
+    sevent = self.last(ScreenEvent)
+    if sevent is not None: it.state.win_sz = sevent.size
     return it
 
   def last_slide(self):
@@ -323,14 +338,14 @@ class AudioRecord(MediaRecordEvent):
   '''Microphone started recording.'''
   def __init__(self, t, i, media):
     MediaRecordEvent.__init__(self, t, i, media)
-    if isinstance(media, AudioData):
+    if not isinstance(media, AudioData):
       raise Event.Error("Data should be AudioData, not %s" % type(media))
 
 class VideoRecord(MediaRecordEvent):
   '''Something (A/V) stopped recording.'''
   def __init__(self, t, i, media):
     MediaEvent.__init__(self, t, i, media)
-    if isinstance(media, VideoData):
+    if not isinstance(media, VideoData):
       raise Event.Error("Data should be VideoData, not %s" % type(media))
 
 class Clear(Event):
@@ -395,42 +410,48 @@ class Resize(ScreenEvent):
 
 class Media(object):
   def __init__(self, t):
-    self.data = []
+    self.dats = {}
     self.t = t
 
   def utime(self):
-    return self.t
+    '''Returns the timestamp.'''
+    if t is None:
+      return self.t
+    else:
+      self.t = t
 
 class AudioData(Media):
   '''Audio data.'''
 
   # Enumeration of the various types that are used.
-  MP3 = 0
-  WAV = 1
-  SPX = 2
-  TYPES = [None] * 3
+  RAW = 0
+  MP3 = 1
+  WAV = 2
+  SPX = 3
+  ZLB = 4
+  NUM_TYPES = 5
 
   def __init__(self, t):
     Media.__init__(self, t)
 
-  def load_media(self, key, data):
-    if key not in self.TYPES:
+  def add_type(self, key, data):
+    if key not in range(self.NUM_TYPES):
       raise Event.Error("Invalid data type key: %s" % key)
-    self.files[key] = data
+    self.dats[key] = data
 
-  def __len__(self):
-    return 
+  def append(self, data):
+    self.dats[RAW].append(data)
 
 class VideoData(Media):
   '''Video data.'''
 
   # Enumeration of the various types that are used.
-  MOV = 0
-  MPG = 1
-  RAW = 2
-  TYPES = [None] * 3
+  RAW = 0
+  MOV = 1
+  MPG = 2
+  NUM_TYPES = 3
 
   def load_media(self, key, data):
-    if key not in self.TYPES:
+    if key not in range(self.NUM_TYPES):
       raise Event.Error("Invalid data type key: %s" % key)
-    self.files[key] = data
+    self.dats[key] = data

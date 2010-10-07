@@ -326,7 +326,7 @@ class Main:
   def save(self, fname = 'save.dcb'):
     if self.is_recording():
       self.record(False)
-    fileio.save(fname, self.lec, self.audio.make_data())
+    fileio.save(fname, self.lec)
     self.gui.canvas.dirty = False
 
   def load(self, fname = 'save.dcb'):
@@ -502,13 +502,13 @@ if __name__ == '__main__':
 
   if config.export_fmt is not None:
     if config.export_fmt == 'swf':
-      lec, a = fileio.load(config.file_to_load)
+      lec = fileio.load(config.file_to_load)
       exporter.to_swf(lec, a, config.file_to_load[:-4] + '.swf')
     elif config.export_fmt == 'pdf':
-      lec, a = fileio.load(config.file_to_load)
+      lec = fileio.load(config.file_to_load)
       exporter.to_pdf(lec, config.file_to_load[:-4] + '.swf')
     elif config.export_fmt in ['dcd', 'dcb', 'dcx', 'dar', 'dct']:
-      lec, a = fileio.load(config.file_to_load)
+      lec = fileio.load(config.file_to_load)
       fileio.save(config.file_to_load[:-3] + config.export_fmt, lec, a)
     else:
       print 'Unknown flag "--exp-%s"' % config.export_fmt
