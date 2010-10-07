@@ -1,36 +1,52 @@
-\documentclass[12pt]{report}
-
-\usepackage{fullpage}
-\usepackage{graphicx}
-
-\begin{document}
-
 \chapter{DCB File Format}
-The Deskcorder binary (DCB) file format is what Deskcorder uses to save and load lectures.  Fig.~\ref{fig:dcb-ff} shows a graphical representation of the file format.
+The Deskcorder binary (DCB) file format is what Deskcorder uses to save and load lectures.  Fig.~\ref{fig:dcb-ff-v0.1.1} shows a graphical representation of the file format.
+
+\section{DCB v0.1.1}
+This section details version 0.1.1 of the file format.  This was created just before the major change to the {\tt Lecture} data structure, and the functions that write this file format work only with v0.1 of Deskcorder.  If you're looking for the ``most recent'' version of the file format, firstly, DCB is deprecated, and secondly, this is not the most recent version of DCB.
 
 \begin{figure}[ht]
   \centering
-  \includegraphics[width=\columnwidth]{figures/dcb-ff}
-  \caption{An outline of the most-recent Deskcorder binary file format (v.0.1.1). Long boxes are 8 bytes, short ones 4. All boxes without types are integers.}
-  \label{fig:dcb-ff}
+  \includegraphics[width=.8\columnwidth]{figures/dcb-ff-v0-1-1}
+  \caption{An outline of the DCB v0.1.1. Long boxes are 8 bytes, short ones 4. All boxes without types are integers.}
+  \label{fig:dcb-ff-v0.1.1}
 \end{figure}
 
-\section{Top Level}
-The file is formatted as an array of arrays.  At the top level is an 8-byte ``magic number" that was chosen randomly to be hexadecimal {\tt 42FA32BA22AAAABB}.  The purpose of this number is to make it unlikely that a non-DCB file will be mis-recognized as a file containing a valid lecture.  Next comes the version number (currently v.1.0.0) in major, minor, and bug order.  Especially during development, this file format changes from commit to commit, so this number is used upon read to distinguish between implementations of the file.  The major version corresponds to the release version of the desktop application it was created during. The minor version corresponds to an alteration (usually an improvement) in the format, and the bug version corresponds to bug fixes in the DCB-saving function.  These numbers are each 4-byte integers.  After the slides, come the number and list of moves, then lastly the number and list of audio files.
+\subsection{Top Level}
+The file is formatted as an array of arrays.  At the top level is an 8-byte ``magic number" that was chosen randomly to be hexadecimal {\tt 42FA32BA22AAAABB}.  The purpose of this number is to make it unlikely that a non-DCB file will be mis-recognized as a file containing a valid lecture.  Next comes the version number (currently v0.1.0) in major, minor, and bug order.  Especially during development, this file format changes from commit to commit, so this number is used upon read to distinguish between implementations of the file.  The major version corresponds to the release version of the desktop application it was created during. The minor version corresponds to an alteration (usually an improvement) in the format, and the bug version corresponds to bug fixes in the DCB-saving function.  These numbers are each 4-byte integers.  After the slides, come the number and list of moves, then lastly the number and list of audio files.
 
-\section{Slides}
+\subsection{Slides}
 Next comes a 4-bit integer that lists the number of slides, followed by that number of slides.  Each slide's entry is an 8-bit Unix time stamp (the time the slide was created\footnote{This will either be the time that the program started (for the first slide) or the time that the slide was created.}) followed by the number of strokes in that slide, and then entries for those strokes.
 
-\section{Stroke}
+\subsection{Strokes}
 Each stroke's entry starts with the number of points in that stroke.  If that number is 0, the entry is done.  If it's greater than 0, then the entry continues with a color stored as $(r,g,b)$, where $r,g,b\in[0,1]$, 1 meaning ``full intensity" and 0 meaning ``black".  Lastly, the points in this stroke are listed.
 
-\section{Point}
+\subsection{Points}
 Each point's entry consists of an 8-byte Unix time stamp, normalized $(x,y)$ coordinates (4 bytes per coordinate; both coordinates a floating-point number), and the amount of pressure on the pen.  $x$ and $y$ are in $[0,1]$, so that the drawing canvas can be infinitely scaled, and so that the lecture can be played on any size canvas on any computer without losing information.
 
-\section{Moves}
+\subsection{Moves}
 Each move's entry consists of an 8-byte Unix time stamp and an $(x,y)$ pair of 4-byte floating-point numbers, where $x,y\in[0,1]$.
 
-\section{Audio}
+\subsection{Audio Data}
 Each audio entry has an 8-byte Unix time stamp and an 8-byte integer\footnote{We chose to use an 8-byte integer here, because this data tends to be quite long.} with the length of the {\tt zlib}-compressed data, followed by the {\tt zlib}-compressed data.
 
-\end{document}
+\section{DCB v0.2.0}
+This section details the \emph{differences} between versions 0.1.1 and 0.2.0\footnote{I have not yet updated fig.~\ref{fig:dcb-ff-v0.2.0} to reflect the changes.  I should, and probably will, but not for a bit.}.  Both of these versions were meant to work only with the hierarchical version of the {\tt Lecture} data structure.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=.8\columnwidth]{figures/dcb-ff-v0-2-0}
+  \caption{An outline of the DCB v0.2.0 (most-recent). Long boxes are 8 bytes, short ones 4. All boxes without types are integers.  (UPDATE ME!)}
+  \label{fig:dcb-ff-v0.2.0}
+\end{figure}
+
+\subsection{Top Level}
+The only change to this, is that we added a 4-byte float representing the aspect ratio of the screen right after the bug version.
+
+\subsection{Slides}
+Slides remained unchanged in this version.
+
+\subsection{Strokes}
+The stroke also has the aspect ratio of the screen at the time the stroke was made, and the thickness of the stroke added right after the number of points in the stroke.  As before, these values are only present if the number of points in the stroke is $>$ 0.
+
+\subsection{Points}
+Here the {\tt thickness} value is, again, the raw pressure of the point applied at draw-time.  This pressure value $p \in [0,1]$ and is a percentage.  Multiply this by the thickness and normalize by the size of the window to draw properly.
