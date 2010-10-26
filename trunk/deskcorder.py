@@ -199,6 +199,7 @@ class Main:
     self.gui.canvas.ttpt = self.progress + self.lec.first().utime()
 
     # FIXME hack: I'm fixing the symptom, not the cause, here ...
+    #             The problem is the audio is 1s after the video.
     self.progress += 1
 
     # I'm simulating a do-while loop here.  This one is basically:
@@ -209,7 +210,7 @@ class Main:
     #  2. When out iterator goes past the end of the lec object and we're
     #     out of audio, return false (stop calling this function).
     for e in self.it.next(self.progress):
-      if isinstance(e, ScreenEvent):
+      if isinstance(e, Clear):
         self.gui.canvas.clear()
       elif isinstance(e, Click):
         self.last_point = e
@@ -217,6 +218,8 @@ class Main:
         self.gui.canvas.draw(self.it.state.color,
             self.it.state.thickness * e.p, self.last_point.pos, e.pos)
         self.last_point = e
+      else:
+        print 'Not handling event of type', type(e)
 
     if not self.it.has_next() and a_time < 0:
       self.stop()
