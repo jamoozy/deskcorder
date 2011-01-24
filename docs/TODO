@@ -1,0 +1,11 @@
+This file contains a list of all desired features.
+
+1) Undo/redo
+
+2) "go back" e.g., to previous slide.  This is similar to undo/redo, I guess.
+
+3) pbar recording progress counter.
+  * (since now disabled)
+  * Something with update callback
+
+4) Mouse cursor change (GDK) based on where it is.
