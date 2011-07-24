@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python2.5
 
 import math
 import sys
@@ -489,6 +489,11 @@ def parse_args(args):
   return config
 
 if __name__ == '__main__':
+  # valid video modules in preferred order
+  VALID_V_MODULES = ['gtkgui', 'macgui', 'qtgui', 'dummy']
+
+  # valid audio modules in preferred order
+  VALID_A_MODULES = ['alsa', 'macaudio', 'qtaudio', 'dummy']
 
   config = parse_args(sys.argv[1:])
 
