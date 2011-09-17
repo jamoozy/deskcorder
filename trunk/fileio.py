@@ -110,9 +110,29 @@ def save(fname, lec = None, req_v = DEFAULT_VERSION):
     DCD(fname, req_v).save(lec)
   elif fname.lower().endswith(".dar"):
     DAR(fname, req_v).save(lec)
+  elif fname.lower().endswith(".txt"):
+    save_last_stroke(fname, lec)
   else:
     _save_dcb(fname, lec, req_v)
 
+def save_last_stroke(fname, lec):
+  f = open(fname, 'w')
+  it = iter(lec)
+  stroke = []
+  state = Lecture.State()
+  while it.has_next():
+    n = it.next()
+    if isinstance(n, Click):
+      stroke = [(n.x(), n.y(), n.t)]
+    elif isinstance(n, Point) or isinstance(n, Release):
+      stroke.append((n.x(), n.y(), n.t))
+    elif isinstance(n, ScreenEvent):
+      state = n
+
+  for p in stroke:
+    f.write("%d, %d, %d\n" %
+        (p[0] * state.width(), p[1] * state.height(), p[2]))
+  f.close()
 
 
 ############################################################################
