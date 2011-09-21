@@ -297,3 +297,7 @@ All Files (*.*)'''
 
   def deinit(self):
     pass
+  
+class Audio:
+  def __init__(self, dc):
+    pass
