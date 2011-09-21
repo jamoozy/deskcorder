@@ -125,13 +125,11 @@ def save_strokes_as_csv(fname, lec):
   state = Lecture.State()
   while it.has_next():
     n = it.next()
-    if isinstance(n, Click):
-      stroke.append([(n.x(), n.y(), n.t)])
-    elif isinstance(n, Point)
+    if isinstance(n, Click) or isinstance(n, Point):
       stroke.append((n.x(), n.y(), n.t))
     elif isinstance(n, Release):
       stroke.append((n.x(), n.y(), n.t))
-      stroke.append((,))
+      stroke.append(())
     elif isinstance(n, ScreenEvent):
       state = n
 
