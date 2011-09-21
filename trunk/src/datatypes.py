@@ -1,5 +1,6 @@
+import sys
 import time
-#import traceback
+import traceback
 
 ##############################################################################
 # ----------------------------- State classes ------------------------------ #
@@ -134,10 +135,19 @@ known as a "trace"), then you can just pass that here.'''
       self.adats.append(e.get_media())
     elif isinstance(e, VideoRecord):
       self.vdats.append(e.get_media())
+    elif isinstance(e, Start):
+      self.resize(e.size)
+    elif isinstance(e, End):
+      self.resize(e.size)
     elif isinstance(e, ScreenEvent):
-      print '''Warning: I'd prefer you use Lecture.resize((w,h))
-             to Lecture.append(Resize(t,(w,h)))'''
-      #print '  This grievous offense was committed at:', traceback.print_last()
+      sys.stdout.flush()
+      if isinstance(e, Resize):
+        sys.stderr.write('''Warning: I'd prefer you use Lecture.resize((w,h))
+                           to Lecture.append(Resize(t,(w,h))) at:\n''')
+      else:
+        sys.stderr.write('''Warning: Unrecognized ScreenEvent at:\n''')
+      traceback.print_stack()
+      sys.stderr.flush()
       self.resize(e.size)
       return  # because resize handles everything
     elif isinstance(e, Color):
