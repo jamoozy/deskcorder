@@ -1,11 +1,16 @@
 #!/usr/bin/python2.5
 
+'''
+This file contains the "main" part of Deskcorder and the command line parsing and
+configuration aspects.  "The main part" is in the Main class.  See its
+documentation for more details.
+'''
+
 import math
 import sys
-import time
-import thread
 import os
-import signal
+import tempfile
+from linux import InvalidOperationError
 from datatypes import *
 
 import fileio
@@ -13,12 +18,16 @@ import exporter
 
 
 
-############################################################################
-# ---------------------------- Main Object ------------------------------- #
-############################################################################
+################################################################################
+# -------------------------------- Main Object ------------------------------- #
+################################################################################
 
 class Main:
   def __init__(self, gui_enabled=True, audio_enabled=True):
+    '''Create a new Main object---the object responsible for controlling the
+    flow of a program.  It uses an Audio and a Video class to handle user IO,
+    and does all the processing here.'''
+
     # Playback variables.
     self.play_time = None
     self.break_times = []
@@ -48,15 +57,21 @@ class Main:
     self.progress = -1
 
   def set_color(self, r, g, b):
+    '''Sets the color of the pen stroke.  r, g, and b are the red, green, and
+    blue components of the color, respectively.'''
     self.lec.append(Color(time.time(), (r,g,b)))
 
   def set_thickness(self, th):
+    '''Sets the thickness of the pen.  Must be in [0,1]'''
     self.lec.append(Thickness(time.time(), th))
 
   def is_empty(self):
+    '''Determines if anything has been done to the contained Lecture object or
+    the contained audio entity.'''
     return self.lec.is_empty() and self.audio.is_empty()
 
   def all_buttons_off(self):
+    '''Turns all buttons off.'''
     self.gui.record_pressed(False)
     self.gui.play_pressed(False)
     self.gui.pause_pressed(False)
@@ -78,11 +93,14 @@ class Main:
       self.stop()
 
   def load_config(self, config):
+    '''Loads a configuration into this object.'''
     self.config = config
-    if config is None: return
+    if config is None:
+      return
 
     print 'Loading configuration from "%s"' % config.config_dir
 
+    # If we're recovering from a crash, check to see if we should reload.
     if os.path.isdir(config.lecture_dir):
       self.gui.ask_recover()
 
@@ -91,12 +109,12 @@ class Main:
       try:
         self.load(config.file_to_load)
       except IOError as e:
-        print 'Could not load file, %s: %s"' % (fname, str(e))
+        print 'Could not load file, %s: %s"' % (config.file_to_load, str(e))
     else:
       print 'config.file_to_load:', config.file_to_load
 
-  def run(self, config = None):
-    '''Runs the program.'''
+  def run(self, config=None):
+    '''Runs the program.  Cleans up when done.'''
     self.gui.init()
     self.load_config(config)
     try:
@@ -107,6 +125,7 @@ class Main:
     self.gui.deinit()
 
   def is_recording(self):
+    '''Determines if the mic is on and recording.'''
     return self.audio.is_recording()
 
   def record(self, rec):
@@ -115,7 +134,7 @@ class Main:
       self.gui.disable_progress_bar()
       try:
         self.audio.record()
-      except fileio.InvalidOperationError:
+      except InvalidOperationError:
         self.gui.record_pressed(False)
     else:
       self.gui.enable_progress_bar()
@@ -307,32 +326,44 @@ class Main:
 
 
 
-  ############################################################################
-  # ------------------------------ File I/O -------------------------------- #
-  ############################################################################
+  ##############################################################################
+  # -------------------------------- File I/O -------------------------------- #
+  ##############################################################################
 
   def exp_png(self, fname, size, times):
+    '''PNG exporting function.  See signature of exporter.to_png()'''
     if fname.lower().endswith('.png'):
       exporter.to_png(self.lec, fname[:-4], size, times)
     else:
       exporter.to_png(self.lec, fname, size, times)
 
   def exp_pdf(self, fname, size, times):
+    '''PDF exporting function.  See signature of exporter.to_pdf()'''
     if fname.lower().endswith('.pdf'):
       exporter.to_pdf(self.lec, fname[:-4], size, times)
     else:
       exporter.to_pdf(self.lec, fname, size, times)
 
   def exp_swf(self, fname):
+    '''SWF exporting function.  See signature of exporter.to_swf()'''
     exporter.to_swf(self.lec, self.audio.make_data(), fname)
 
   def save(self, fname = 'save.dcb'):
+    '''Cleans everything up (play back, recording, etc), and saves the current
+    lecture and audio.  If there is no set filename, uses the GUI to ask the
+    user where they would like the file saved.  (Their answer will effect the
+    format of the save.'''
+
+    # TODO check if this is dirty.
     if self.is_recording():
       self.record(False)
     fileio.save(fname, self.lec)
     self.gui.canvas.dirty = False
 
   def load(self, fname = 'save.dcb'):
+    ''''''
+
+    # TODO check if this is dirty.
     try:
       self.lec = fileio.load(fname)
       return True
@@ -351,9 +382,9 @@ class Configuration:
   parameters.'''
 
   # valid video modules in preferred order
-  VALID_AV_MODULES = ['linux', 'mac', 'qt', 'dummy']
+  VALID_AV_MODULES = ['linux', 'win', 'mac', 'qt', 'dummy']
 
-  def __init__(self, config_dir = None):
+  def __init__(self, config_dir=None):
     # platform-agnostic options
     self.help_req = False
     self.export_fmt = None
@@ -363,28 +394,39 @@ class Configuration:
 
   def _load_defaults(self, config_dir):
     '''Loads the platform-dependent default configuration.'''
-    # platform-dependent options
+
+    # Set configuration directory and files.
+    if config_dir is None:
+      self.config_dir = os.path.expanduser('~/.deskcorder')
+    else:
+      self.config_dir = os.path.expanduser(config_dir)
+    self.config_file = self.config_dir + '/config'
+    self.lecture_dir = self.config_dir + '/session'
+
+    # Platform-dependent options.
     if os.name == 'posix':
       self.gui_module = 'linux'
       self.audio_module = 'linux'
-      self.config_dir = os.path.expanduser('~/.deskcorder' if config_dir is None else config_dir)
-      self.config_file = self.config_dir + '/config'
-      self.lecture_dir = self.config_dir + '/session'
     elif os.name == 'nt':
-      print 'Warning: NT varieties of Windows not yet supported.'
+      print 'Warning: NT varieties of Windows not fully supported.'
+      self.gui_module = 'win'
+      self.audio_module = 'win'
     elif os.name == 'os2':
       print 'Warning: Mac OS not yet supported.'
+      self.gui_module = None
+      self.audio_module = None
     elif os.name == 'ce':
       print 'Warning: CE varieties of Windows not yet supported.'
+      self.gui_module = None
+      self.audio_module = None
     elif os.name == 'riscos':
       print 'Warning: I have no idea what RiscOS is ...'
+      self.gui_module = None
+      self.audio_module = None
     else:
       print 'Warning: unhandled OS type:', os.name
       self.gui_module = None
       self.audio_module = None
-      self.config_dir = None
-      self.config_file = None
-      self.lecture_dir = None
 
   def _load_config(self, cfile):
     '''Loads the configuration in 'cfile'.'''
@@ -420,7 +462,7 @@ class Configuration:
       pass
 
 
-  def load_file(self, fname = None):
+  def load_file(self, fname=None):
     '''Register the file to load with the configuration.  Assume that if a
     file name has already been given, the new "file" is actually a bad
     command line argument.  If fname is None, assume that the caller wants
@@ -504,13 +546,13 @@ if __name__ == '__main__':
   if config.export_fmt is not None:
     if config.export_fmt == 'swf':
       lec = fileio.load(config.file_to_load)
-      exporter.to_swf(lec, a, config.file_to_load[:-4] + '.swf')
+      exporter.to_swf(lec, lec.adats, config.file_to_load[:-4] + '.swf')
     elif config.export_fmt == 'pdf':
       lec = fileio.load(config.file_to_load)
       exporter.to_pdf(lec, config.file_to_load[:-4] + '.swf')
     elif config.export_fmt in ['dcd', 'dcb', 'dcx', 'dar', 'dct']:
       lec = fileio.load(config.file_to_load)
-      fileio.save(config.file_to_load[:-3] + config.export_fmt, lec, a)
+      fileio.save(config.file_to_load[:-3] + config.export_fmt, lec, lec.adats)
     else:
       print 'Unknown flag "--exp-%s"' % config.export_fmt
     sys.exit(0)
@@ -522,8 +564,7 @@ if __name__ == '__main__':
     except AttributeError:
       config.audio_module = None
       print 'audio module "%s" not found' % config.audio_module
-
-  if config.audio_module is None:
+  else:
     for a in Configuration.VALID_AV_MODULES:
       try:
         Audio = __import__(a).Audio
@@ -539,8 +580,7 @@ if __name__ == '__main__':
     except AttributeError:
       config.gui_module = None
       print 'video module "%s" not found' % config.gui_module
-
-  if config.gui_module is None:
+  else:
     for v in Configuration.VALID_AV_MODULES:
       try:
         GUI = __import__(v).GUI

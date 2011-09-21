@@ -1,5 +1,5 @@
 import math
-import cairo
+#import cairo
 from datatypes import *
 import fileio
 import swfOutput as swf
@@ -8,7 +8,7 @@ import sys
 import subprocess
 
 def _draw_slide_on_surface(ctx, slide, scale = (400,300), ts = None):
-  ctx.set_line_cap(cairo.LINE_CAP_ROUND)
+  #ctx.set_line_cap(cairo.LINE_CAP_ROUND)
   for stroke in slide.strokes:
     if len(stroke.points) <= 0: continue
     ctx.set_source_rgb(stroke.r(), stroke.g(), stroke.b())
@@ -23,8 +23,8 @@ def _draw_slide_on_surface(ctx, slide, scale = (400,300), ts = None):
     ctx.stroke()
 
 def _draw_to_png(fname, slide, size = (400,300), ts = None):
-  surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size[0], size[1])
-  ctx = cairo.Context(surface)
+  #surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, size[0], size[1])
+  #ctx = cairo.Context(surface)
   ctx.set_source_rgb(1.0,1.0,1.0)
   ctx.paint()
   _draw_slide_on_surface(ctx, slide, size, ts)
@@ -37,8 +37,8 @@ def _draw_to_png(fname, slide, size = (400,300), ts = None):
 ##############################################################################
 
 def to_pdf(trace, ofname, size = (400,300), times = None):
-  surface = cairo.PDFSurface("%s.pdf" % ofname, size[0], size[1])
-  ctx = cairo.Context(surface)
+  #surface = cairo.PDFSurface("%s.pdf" % ofname, size[0], size[1])
+  #ctx = cairo.Context(surface)
   if times is None:
     print 'Writing %d PDF %s' % \
         (len(trace.slides), 'pages' if len(trace.slides) > 1 else 'page')

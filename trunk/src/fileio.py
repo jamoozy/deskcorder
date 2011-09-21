@@ -78,7 +78,7 @@ def load_wav(fname):
 # ----------------------------- Public API ------------------------------- #
 ############################################################################
 
-def load(fname, win_sz = (1,1)):
+def load(fname, win_sz=(1,1)):
   '''Reads in a file and returns a 2-tuple of lecture an audio.'''
   try:
     if fname.lower().endswith(".dcx"):
@@ -92,12 +92,12 @@ def load(fname, win_sz = (1,1)):
     elif fname.lower().endswith(".dar"):
       return DAR(fname, DEFAULT_VERSION).load()
     else:
-      return _load_dcb(fname, win_sz)
+      return DCB(fname, DEFAULT_VERSION).load()
   except FormatError as e:
     print 'FormatError:', str(e)
     return ()
 
-def save(fname, lec = None, req_v = DEFAULT_VERSION):
+def save(fname, lec=None, req_v=DEFAULT_VERSION):
   '''Writes out a lecture and set of audio snippets to a file.'''
   if lec is None: return
   if fname.lower().endswith(".dcx"):
@@ -113,7 +113,10 @@ def save(fname, lec = None, req_v = DEFAULT_VERSION):
   elif fname.lower().endswith(".txt"):
     save_last_stroke(fname, lec)
   else:
-    _save_dcb(fname, lec, req_v)
+    DCB(fname, req_v).save(lec)
+    
+    
+
 
 def save_last_stroke(fname, lec):
   f = open(fname, 'w')
@@ -135,9 +138,9 @@ def save_last_stroke(fname, lec):
   f.close()
 
 
-############################################################################
-# -------------------------------- DCB ----------------------------------- #
-############################################################################
+################################################################################
+# ------------------------------------ DCB ----------------------------------- #
+################################################################################
 
 class DCB(object):
   '''Does Deskcorder Binary loading and saving.  Even after this format
@@ -206,7 +209,7 @@ class DCB(object):
     self.log.write('  slide: %d strokes at %.0fms\n' % (len(slide), slide.t))
     self.log.flush()
     for stroke in slide.strokes:  # Stroke block
-      _save_stroke(fp, log, stroke, self.v)
+      self._save_stroke(stroke)
 
   def _save_stroke(self, stroke):
     '''Writes a stroke to file in DCB format.'''
@@ -464,9 +467,9 @@ class DCB(object):
 
 
 
-############################################################################
-# -------------------------------- DCD ----------------------------------- #
-############################################################################
+################################################################################
+# ----------------------------------- DCD ------------------------------------ #
+################################################################################
 
 class DCD(DCB):
   def __init__(self, fname, version):
@@ -486,10 +489,10 @@ class DCD(DCB):
     self.log = open(os.path.join(self.fname, "write.txt"), "w")
     self.fp.write(MAGIC_NUMBER + '\n')
     self.fp.write("%d.%d.%d\n" % self.v)
-    self.fp.write("%f" % lecture.aspect_ratio)
+    self.fp.write("%f" % self.lec.aspect_ratio)
     self.fp.close()
     i = 0
-    for slide in lecture.slides:
+    for slide in self.lec.slides:
       i += 1
       slide_dir = os.path.join(self.fname, "slide%03d" % i)
       os.mkdir(slide_dir)
@@ -588,9 +591,9 @@ class DCD(DCB):
 
 
 
-############################################################################
-# -------------------------------- DAR ----------------------------------- #
-############################################################################
+################################################################################
+# ------------------------------------ DAR ----------------------------------- #
+################################################################################
 
 class DAR(DCD):
   def __init__(self, fname, version):
@@ -609,9 +612,9 @@ class DAR(DCD):
 
 
 
-############################################################################
-# -------------------------------- DCX ----------------------------------- #
-############################################################################
+################################################################################
+# ----------------------------------- DCX ------------------------------------ #
+################################################################################
 
 def _save_dcx(fname = 'save.dcx', lecture = [], audiofiles = [], req_v = DEFAULT_VERSION):
   '''Saves DCX-v0.1.1
@@ -637,9 +640,9 @@ def _save_dcx(fname = 'save.dcx', lecture = [], audiofiles = [], req_v = DEFAULT
               (point[1][0] / float(point[4][0]), point[1][1] / float(point[4][1]), point[0], thickness))
         f.write('    </stroke>\n')
       f.write('  </slide>\n')
-  for pos in positions:
-    f.write('  <position x="%lf" y="%lf" time="%lf" />\n' %
-        (pos[1][0] / float(pos[2][0]), pos[1][1] / float(pos[2][1]), pos[0]))
+#  for pos in lecture
+#    f.write('  <position x="%lf" y="%lf" time="%lf" />\n' %
+#        (pos[1][0] / float(pos[2][0]), pos[1][1] / float(pos[2][1]), pos[0]))
   if isinstance(audiofiles, list):
     for af in audiofiles:
       f.write('  <audiofile time="%lf" type="wav" encoding="base64">' % af[0])
@@ -912,11 +915,11 @@ def _save_dct(fname = "save.dct", trace = [], positions = [], audiofiles = [], r
   output.flush()
   output.close()
 
-  write_wavs(fname, audiofiles)
+  save_wavs(fname, audiofiles)
 
 
 def __parse_version_string(version):
-  '''Returns a tuple of (maj, min, bug) read from the version string.  If For
+  '''Returns a tuple of (major, minor, bug) read from the version string.  If For
   each missing entry, 0 is assumed.'''
   dot1 = version.find('.')
   dot2 = version.find('.', dot1 + 1)
@@ -925,21 +928,21 @@ def __parse_version_string(version):
   if dot1 < 0: dot1 = len(version)
   if dot2 < 0: dot2 = len(version)
 
-  maj = version[:dot1]
-  min = version[dot1+1:dot2]
+  major = version[:dot1]
+  minor = version[dot1+1:dot2]
   bug = version[dot2+1:]
 
   try:
-    maj = int(maj) if len(maj) > 0 else 0
+    major = int(major) if len(major) > 0 else 0
   except ValueError:
-    print 'Warning, "%s" not a valid version sub-string (expected integer) assuming 0' % maj
-    maj = 0
+    print 'Warning, "%s" not a valid version sub-string (expected integer) assuming 0' % major
+    major = 0
 
   try:
-    min = len(min) > 0 and int(min) or 0
+    minor = len(minor) > 0 and int(minor) or 0
   except ValueError:
-    print 'Warning, "%s" not a valid version sub-string (expected integer) assuming 0' % min
-    min = 0
+    print 'Warning, "%s" not a valid version sub-string (expected integer) assuming 0' % minor
+    minor = 0
 
   try:
     bug = len(bug) > 0 and int(bug) or 0
@@ -947,12 +950,14 @@ def __parse_version_string(version):
     print 'Warning, "%s" not a valid version sub-string (expected integer) assuming 0' % bug
     bug = 0
 
-  return maj, min, bug
+  return major, minor, bug
 
-def _load_dct(fname = 'save.dct', win_sz = (1,1)):
-  '''Reads the input 'f' and assumes that the file's pointer is already at one
-  past the version string.  Returns a recursively-tupled representation of the
-  contents of the file based on the version tuple given.'''
+def _load_dct(fname='save.dct', win_sz=(1,1)):
+  '''Painfully deprecated (does it even run???).
+  
+  Reads the input 'fname' and assumes that the file's pointer is already at
+  one past the version string.  Returns a recursively-tupled representation of
+  the contents of the file based on the version tuple given.'''
 
   f = open(fname, 'r')
 
@@ -1027,7 +1032,7 @@ def __read_cts(line):
     return 0
   return map(float_or_grace, line.split(' '))
 
-def _save_dct(fname = 'save.dct', trace = [], positions = [], audiofiles = []):
+def _save_dct(fname='save.dct', trace=[], positions=[], audiofiles=[]):
   '''Writes the contents of state to a file using the most current file
   version.'''
   output = open(fname, 'w')

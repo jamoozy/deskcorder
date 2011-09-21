@@ -62,6 +62,7 @@ class Canvas(gtk.DrawingArea):
     self.frozen = False
 
   def draw_last_slide(self):
+    
     it = self.dc.lec.last_slide_iter()
     try:
       last_point = None
@@ -94,6 +95,7 @@ class Canvas(gtk.DrawingArea):
       pass
 
   def _configure(self):
+    
     self.dc.lec.resize(self.window.get_size())
     self.draw_all()
 
@@ -397,7 +399,7 @@ Draw and record yourself, then play it back for your friends!  What a party tric
   def exp_png(self):
     if self.exp_png_fun is None:
       self.int_err('Export to PNG functionality disabled.')
-      returnk
+      return
     #frames = self.frame_selector()
     frames = []
 
@@ -748,9 +750,10 @@ class Audio:
     self.out.setformat(self.format)
 
   def print_info(self):
-    print 'Card name: %s' % a.inp.cardname()
-    print ' PCM mode: %d' % a.inp.pcmmode()
-    print ' PCM type: %d' % a.inp.pcmtype()
+    if self.inp is None: return
+    print 'Card name: %s' % self.inp.cardname()
+    print ' PCM mode: %d' % self.inp.pcmmode()
+    print ' PCM type: %d' % self.inp.pcmtype()
 
   def reset(self):
     self.play_start = None
