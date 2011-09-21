@@ -123,6 +123,12 @@ known as a "trace"), then you can just pass that here.'''
   def __len__(self):
     return len(self.events)
 
+  def aspect_ratio(self, val=None):
+    if val == None:
+      return self.state.aspect_ratio();
+    else:
+      self.state.win_sz[0] = val * self.state.win_sz[1]
+
   def append(self, e):
     if isinstance(e, AudioRecord):
       self.adats.append(e.get_media())

@@ -111,14 +111,14 @@ def save(fname, lec=None, req_v=DEFAULT_VERSION):
   elif fname.lower().endswith(".dar"):
     DAR(fname, req_v).save(lec)
   elif fname.lower().endswith(".txt"):
-    save_last_stroke(fname, lec)
+    save_strokes_as_csv(fname, lec)
   else:
     DCB(fname, req_v).save(lec)
     
     
 
 
-def save_last_stroke(fname, lec):
+def save_strokes_as_csv(fname, lec):
   f = open(fname, 'w')
   it = iter(lec)
   stroke = []
@@ -126,15 +126,20 @@ def save_last_stroke(fname, lec):
   while it.has_next():
     n = it.next()
     if isinstance(n, Click):
-      stroke = [(n.x(), n.y(), n.t)]
-    elif isinstance(n, Point) or isinstance(n, Release):
+      stroke.append([(n.x(), n.y(), n.t)])
+    elif isinstance(n, Point)
       stroke.append((n.x(), n.y(), n.t))
+    elif isinstance(n, Release):
+      stroke.append((n.x(), n.y(), n.t))
+      stroke.append((,))
     elif isinstance(n, ScreenEvent):
       state = n
 
   for p in stroke:
-    f.write("%d, %d, %d\n" %
-        (p[0] * state.width(), p[1] * state.height(), p[2]))
+    if len(p) == 3:
+      f.write("%d, %d, %d" %
+          (p[0] * state.width(), p[1] * state.height(), p[2]))
+    f.write("\n")
   f.close()
 
 
@@ -457,6 +462,8 @@ class DCB(object):
       adat.add_type(AudioData.SPX, cdat)
       s = speex.new(raw = True)
       raw_dat = s.decode(cdat)
+    else:
+      raw_dat = cdat
     adat.add_type(AudioData.RAW, raw_dat)
     ar = AudioRecord(t / 1000.0, len(self.lec.adats), adat)
     self.lec.adats.append(adat)
@@ -475,6 +482,12 @@ class DCD(DCB):
   def __init__(self, fname, version):
     DCB.__init__(self, fname, version)
 
+  def write_metadata(self):
+    self.fp.write(MAGIC_NUMBER + '\n')
+    self.fp.write("%d.%d.%d\n" % self.v)
+    self.fp.write("%f" % self.lec.aspect_ratio())
+    self.fp.close()
+
   def save(self, lec = None):
     if os.path.exists(self.fname):
       if os.path.isdir(self.fname):
@@ -487,14 +500,10 @@ class DCD(DCB):
     os.mkdir(self.fname)
     self.fp = open(os.path.join(self.fname, "metadata"), "w")
     self.log = open(os.path.join(self.fname, "write.txt"), "w")
-    self.fp.write(MAGIC_NUMBER + '\n')
-    self.fp.write("%d.%d.%d\n" % self.v)
-    self.fp.write("%f" % self.lec.aspect_ratio)
-    self.fp.close()
-    i = 0
-    for slide in self.lec.slides:
-      i += 1
+    self.write_metadata()
+    for i in xrange(len(self.lec.slides)):
       slide_dir = os.path.join(self.fname, "slide%03d" % i)
+      slide = self.lec.slides[i]
       os.mkdir(slide_dir)
       self.fp = open(os.path.join(slide_dir, "metadata"), "w")
       self.fp.write("%f\n" % slide.t)
@@ -509,9 +518,8 @@ class DCD(DCB):
         self._save_stroke(stroke)
         self.fp.close()
 
-    i = 0
-    for adat in self.lec.adats:
-      i += 1
+    for i in xrange(len(self.lec.adats)):
+      adat = self.lec.adats[i]
       fname = os.path.join(self.fname, "audio%03d" % i)
       self.fp = open(fname, "w")
       self.log.write("\nStarting new audio (%s) --------------\n\n" % fname)
@@ -552,7 +560,7 @@ class DCD(DCB):
       self.fp.close()
 
     self.lec = Lecture()
-    self.lec.aspect_ratio = ar
+    self.lec.aspect_ratio(ar)
     
     # Populate it with stroke data.
     for slide_entry in info[1]:
@@ -594,6 +602,34 @@ class DCD(DCB):
 ################################################################################
 # ------------------------------------ DAR ----------------------------------- #
 ################################################################################
+
+class DCT(DCD):
+  def __init__(self, fname, version):
+    DCD.__init(self, fname, version)
+
+
+  def save(self, lec = None):
+    if os.path.exists(self.fname):
+      os.remove(self.fname)
+
+    self.lec = lec
+
+    tf = tarfile.open(self.fname, 'w')
+
+    self.fp = tempfile.NamedTemporaryFile(delete=False)
+    self.create_metadata()
+    tf.add(self.fp.name, 'metadata')
+
+    # TODO finish me
+
+  def load(self):
+    pass
+
+
+
+############################################################################
+# -------------------------------- DAR ----------------------------------- #
+############################################################################
 
 class DAR(DCD):
   def __init__(self, fname, version):
