@@ -382,7 +382,7 @@ class Configuration:
   parameters.'''
 
   # valid video modules in preferred order
-  VALID_AV_MODULES = ['linux', 'win', 'mac', 'qt', 'dummy']
+  VALID_AV_MODULES = ['qt', 'linux', 'win', 'mac', 'dummy']
 
   def __init__(self, config_dir=None):
     # platform-agnostic options
@@ -409,8 +409,8 @@ class Configuration:
       self.audio_module = 'linux'
     elif os.name == 'nt':
       print 'Warning: NT varieties of Windows not fully supported.'
-      self.gui_module = 'win'
-      self.audio_module = 'win'
+      self.gui_module = None
+      self.audio_module = None
     elif os.name == 'os2':
       print 'Warning: Mac OS not yet supported.'
       self.gui_module = None
@@ -564,7 +564,8 @@ if __name__ == '__main__':
     except AttributeError:
       config.audio_module = None
       print 'audio module "%s" not found' % config.audio_module
-  else:
+
+  if config.audio_module is None:
     for a in Configuration.VALID_AV_MODULES:
       try:
         Audio = __import__(a).Audio
@@ -580,7 +581,8 @@ if __name__ == '__main__':
     except AttributeError:
       config.gui_module = None
       print 'video module "%s" not found' % config.gui_module
-  else:
+
+  if config.gui_module is None:
     for v in Configuration.VALID_AV_MODULES:
       try:
         GUI = __import__(v).GUI
