@@ -1,4 +1,4 @@
-#!/usr/bin/python2.5
+#!/usr/bin/python
 
 '''
 This file contains the "main" part of Deskcorder and the command line parsing and
