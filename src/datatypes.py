@@ -428,7 +428,7 @@ class Media(object):
     self.dats = {}
     self.t = t
 
-  def utime(self):
+  def utime(self, t=None):
     '''Returns the timestamp.'''
     if t is None:
       return self.t
@@ -455,7 +455,7 @@ class AudioData(Media):
     self.dats[key] = data
 
   def append(self, data):
-    self.dats[RAW].append(data)
+    self.dats[AudioData.RAW].append(data)
 
 class VideoData(Media):
   '''Video data.'''

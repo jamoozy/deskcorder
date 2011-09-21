@@ -6,56 +6,77 @@ This is a module that serves 2 functions:
 '''
 
 class Audio:
+  '''The Audio class handls all audio files.  This Audio class is meant to be a
+  guide to the individual OS-specific (and special A/V) modules.  Use this class
+  a guide as to what is expected to be in the Audio and GUI classes.'''
   def __init__(self):
+    '''Initialize an Audio object.'''
     print 'Audio::__init__() not implemented'
+
   def make_data(self):
+    '''Deprecated???'''
     print 'Audio::make_data() not implmented'
     return []
+
   def load_data(self, data):
+    '''Deprecated???'''
     print 'Audio::make_data(data) not implmented'
+
   def reset(self):
     print 'Audio::reset() not implmented'
+
   def is_recording(self):
     print 'Audio::is_recording() not implmented'
     return False
+
   def record(self, t = None):
     print 'Audio::record(time=None) not implmented'
+
   def record_tick(self):
     print 'Audio::record(time=None) not implmented'
     return False
+
   def play(self):
     print 'Audio::play() not implmented'
+
   def play_init(self):
     print 'Audio::play_init() not implmented'
+
   def play_tick(self, ttpt = None):
     print 'Audio::play_tick(time_to_play_til=None) not implmented'
     return False
+
   def is_playing(self):
     print 'Audio::is_playing() not implmented'
     return False
+
   def get_s_played(self):
     print 'Audio::get_s_played() not implmented'
     return -1
+
   def get_time_of_first_event(self):
     print 'Audio::get_time_of_first_event() not implmented'
     return -1
+
   def get_current_audio_start_time(self):
     print 'Audio::get_current_audio_start_time() not implmented'
     return -1
+
   def pause(self):
     print 'Audio::pause() not implmented'
+
   def unpause(self):
     print 'Audio::unpause() not implmented'
+
   def stop(self):
     print 'Audio::stop() not implmented'
-  def reset(self):
-    print 'Audio::reset() not implmented'
+
   def is_empty(self):
     print 'Audio::is_empty() not implmented'
 
 class GUI:
-  def __init__(self, lecture):
-    print 'GUI::__init__(lecture) not implemented'
+  def __init__(self, dc):
+    print 'GUI::__init__(dc) not implemented'
   def __getitem__(self, key):
     print 'GUI["%s"] not found!' % key
     return None
