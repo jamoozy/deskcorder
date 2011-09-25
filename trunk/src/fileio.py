@@ -84,7 +84,7 @@ def load(fname, win_sz=(1,1)):
     if fname.lower().endswith(".dcx"):
       return _load_dcx(fname, win_sz)
     elif fname.lower().endswith(".dct"):
-      return _load_dct(fname, win_sz)
+      return DCT(fname, DEFAULT_VERSION).load()
     elif fname.lower().endswith(".dcb"):
       return DCB(fname, DEFAULT_VERSION).load()
     elif fname.lower().endswith(".dcd"):
@@ -103,7 +103,7 @@ def save(fname, lec=None, req_v=DEFAULT_VERSION):
   if fname.lower().endswith(".dcx"):
     _save_dcx(fname, lec, req_v)
   elif fname.lower().endswith(".dct"):
-    _save_dct(fname, lec, req_v)
+    DCT(fname, req_v).save(lec)
   elif fname.lower().endswith(".dcb"):
     DCB(fname, req_v).save(lec)
   elif fname.lower().endswith(".dcd"):
@@ -148,7 +148,7 @@ def save_strokes_as_csv(fname, lec):
 class DCB(object):
   '''Does Deskcorder Binary loading and saving.  Even after this format
   becomes deprecated, its functions are still used in its subclasses.'''
-  def __init__(self, fname, version):
+  def __init__(self, fname, version=DEFAULT_VERSION):
     '''Creates an empty DCB reader/writer.'''
     self.fname = fname
     self.v = version
@@ -477,7 +477,7 @@ class DCB(object):
 ################################################################################
 
 class DCD(DCB):
-  def __init__(self, fname, version):
+  def __init__(self, fname, version=DEFAULT_VERSION):
     DCB.__init__(self, fname, version)
 
   def write_metadata(self):
@@ -598,13 +598,12 @@ class DCD(DCB):
 
 
 ################################################################################
-# ------------------------------------ DAR ----------------------------------- #
+# ------------------------------------ DCT ----------------------------------- #
 ################################################################################
 
 class DCT(DCD):
-  def __init__(self, fname, version):
-    DCD.__init(self, fname, version)
-
+  def __init__(self, fname, version=DEFAULT_VERSION):
+    DCD.__init__(self, fname, version)
 
   def save(self, lec = None):
     if os.path.exists(self.fname):
@@ -612,11 +611,12 @@ class DCT(DCD):
 
     self.lec = lec
 
-    tf = tarfile.open(self.fname, 'w')
+    self.tf = tarfile.open(self.fname, 'w')
 
     self.fp = tempfile.NamedTemporaryFile(delete=False)
-    self.create_metadata()
-    tf.add(self.fp.name, 'metadata')
+    self.write_metadata()
+    self.tf.add(self.fp.name, 'metadata')
+    self.tf.close()
 
     # TODO finish me
 
@@ -630,7 +630,7 @@ class DCT(DCD):
 ############################################################################
 
 class DAR(DCD):
-  def __init__(self, fname, version):
+  def __init__(self, fname, version=DEFAULT_VERSION):
     self.fname = fname
     self.v = version
     self.fp = None
