@@ -716,10 +716,6 @@ Draw and record yourself, then play it back for your friends!  What a party tric
 
 
 
-class InvalidOperationError(RuntimeError):
-  '''Used when an invalid audio operation was made.'''
-  pass
-
 class Audio:
   def __init__(self, lec):
     self.data = []  # K.I.S.S.  Data stored as a string.
