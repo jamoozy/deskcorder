@@ -128,7 +128,7 @@ known as a "trace"), then you can just pass that here.'''
     if val == None:
       return self.state.aspect_ratio();
     else:
-      self.state.win_sz[0] = val * self.state.win_sz[1]
+      self.state.win_sz = (val * self.state.win_sz[1], self.state.win_sz[1])
 
   def append(self, e):
     if isinstance(e, AudioRecord):
@@ -339,13 +339,15 @@ class Drag(MouseEvent):
   def dy(self):
     return self.pos[1]
 
-class Click(MouseEvent):
+class Click(Point):
   '''The mouse was clicked.  a.k.a. "mouse-down"'''
-  pass
+  def __init__(self, t, pos):
+    Point.__init__(self, t, pos, 0.01)
 
-class Release(MouseEvent):
+class Release(Point):
   '''The mouse was released.  a.k.a. "mouse-up"'''
-  pass
+  def __init__(self, t, pos):
+    Point.__init__(self, t, pos, 0.01)
 
 class MediaEvent(Event):
   def __init__(self, t, i):
@@ -358,6 +360,7 @@ class MediaEvent(Event):
         % self.__class__.__name__)
 
 class MediaRecordEvent(MediaEvent):
+  '''Recording some non-pen media event.'''
   def __init__(self, t, i, media):
     MediaEvent.__init__(self, t, i)
     self.media = media
