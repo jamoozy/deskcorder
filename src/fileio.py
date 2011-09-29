@@ -38,6 +38,12 @@ class VersionError(FormatError):
     FormatError.__init__(self, "Unrecognized version: %d.%d.%d" % v)
 
 
+class InternalError(RuntimeError):
+  '''Raised when an internal error occurs.'''
+  pass
+
+
+
 ############################################################################
 # -------------------- Reading and writing functions --------------------- #
 ############################################################################
@@ -155,6 +161,7 @@ class DCB(object):
     self.fp = None
     self.log = None
     self.lec = None
+    self.state = Lecture.State()
 
   def _write_bin_data(self, fmt, *args):
     self.fp.write(struct.pack(fmt, *args))
@@ -231,11 +238,12 @@ class DCB(object):
       for point in stroke.points:
         self._save_point(point)
 
-  def _save_click(self, click):
-    self.fp.write(struct.pack("<Qff", click.utime() * 1000,
-        click.x(), click.y()))
-    self.log.write("    click (%.3f,%.3f) @ %.1f\n" \
-        % (click.pos + click.utime()))
+  def _save_click(self, click, num_points):
+    self.fp.write(struct.pack("<IfffffQfff", num_points,
+      self.state.aspect_ratio(), self.state.thickness,
+      self.state.color.r(), self.state.color.g(), self.state.color.b(),
+      1000 *  click.t, click.x(), click.y(), 0.01))
+    self.log.write("click (%.3f,%.3f) @ %.1f\n" % (click.pos + (click.t,)))
     self.log.flush()
 
   def _save_point(self, point):
@@ -244,13 +252,14 @@ class DCB(object):
       thickness = point.p / math.sqrt(2)
     else:
       thickness = point.p
-    self.fp.write(struct.pack("<Qfff", point.t * 1000, point.x(), point.y(), thickness))
+    self.fp.write(struct.pack("<Qfff", point.t * 1000,
+        point.x(), point.y(), thickness))
     self.log.write('    point (%.3f,%.3f) @ %.1f with %.2f%%\n' \
         % (point.x(), point.y(), point.t, thickness * 100))
     self.log.flush()
 
   def _save_release(self, rel):
-    self.fp.write(struct.pack("<Qff", rel.utime() * 1000,
+    self.fp.write(struct.pack("<Qfff", rel.utime() * 1000,
         rel.x(), rel.y()))
     self.log.write("    release (%.3f,%.3f) @ %.1f\n" \
         % (rel.pos + rel.utime()))
@@ -338,12 +347,12 @@ class DCB(object):
           self._load_audio()
 
     self.fp.close()
+    self.fp = None
     self.log.close()
+    self.log = None
     try:
       return self.lec
     finally:
-      self.fp = None
-      self.log = None
       self.lec = None
 
   def _load_slide(self):
@@ -497,32 +506,84 @@ class DCD(DCB):
 
     os.mkdir(self.fname)
     self.fp = open(os.path.join(self.fname, "metadata"), "w")
-    self.log = open(os.path.join(self.fname, "write.txt"), "w")
     self.write_metadata()
-    for i in xrange(len(self.lec.slides)):
-      slide_dir = os.path.join(self.fname, "slide%03d" % i)
-      slide = self.lec.slides[i]
-      os.mkdir(slide_dir)
-      self.fp = open(os.path.join(slide_dir, "metadata"), "w")
-      self.fp.write("%f\n" % slide.t)
-      self.log.write("Slide started at %f\n" % slide.t)
-      self.fp.close()
-      j = 0
-      for stroke in slide.strokes:
-        j += 1
-        fname = os.path.join(slide_dir, "stroke%03d" % j)
-        self.log.write('\nStarting new stroke (%s) -------------\n\n' % fname)
-        self.fp = open(fname, "w")
-        self._save_stroke(stroke)
+
+    self.log = open(os.path.join(self.fname, "write.txt"), "w")
+
+    it = iter(self.lec)
+    while it.has_next():
+      e = next(it)
+      if isinstance(e, Start):
+        self.state.size = e.size
+        
+        slide_dir = os.path.join(self.fname, "slide000")
+        os.mkdir(slide_dir)
+        num_slides = 1
+        num_strokes = 0
+        num_moves = 0
+        num_points = 0
+
+        self.fp = open(os.path.join(slide_dir, "metadata"), "w")
+        self.fp.write("%f\n" % e.t)
         self.fp.close()
 
-    for i in xrange(len(self.lec.adats)):
-      adat = self.lec.adats[i]
-      fname = os.path.join(self.fname, "audio%03d" % i)
-      self.fp = open(fname, "w")
-      self.log.write("\nStarting new audio (%s) --------------\n\n" % fname)
-      self._save_audio(adat)
-      self.fp.close()
+        self.log.write("Slide started at %f\n" % e.t)
+      elif isinstance(e, Move):
+        print 'Ignoring Move'
+      elif isinstance(e, Click):
+        stroke = [e]
+      elif isinstance(e, Point):
+        stroke.append(e)
+      elif isinstance(e, Drag):
+        self._save_drag(e)
+      elif isinstance(e, Release):
+        self.fp = open(os.path.join(slide_dir, "stroke%03d" % num_strokes))
+        self._save_click(stroke[1], len(stroke) + 1)
+        for ev in stroke[1:]:
+          self._save_point(ev)
+        self._save_release(e)
+        self.fp.close()
+        num_strokes += 1
+      elif isinstance(e, AudioRecord):
+        print 'Ignoring AudioRecord'
+      elif isinstance(e, VideoRecord):
+        print 'Ignoring VideoRecord'
+      elif isinstance(e, Clear):
+        print 'Ignoring Clear'
+      elif isinstance(e, Color):
+        self.state.color = e.color
+      elif isinstance(e, Thickness):
+        pass
+      elif isinstance(e, Resize):
+        pass
+      elif isinstance(e, End):
+        pass
+      else:
+        raise InternalError("Unrecognized Event " + e)
+#    for i in xrange(len(self.lec.slides)):
+#      slide_dir = os.path.join(self.fname, "slide%03d" % i)
+#      slide = self.lec.slides[i]
+#      os.mkdir(slide_dir)
+#      self.fp = open(os.path.join(slide_dir, "metadata"), "w")
+#      self.fp.write("%f\n" % slide.t)
+#      self.log.write("Slide started at %f\n" % slide.t)
+#      self.fp.close()
+#      j = 0
+#      for stroke in slide.strokes:
+#        j += 1
+#        fname = os.path.join(slide_dir, "stroke%03d" % j)
+#        self.log.write('\nStarting new stroke (%s) -------------\n\n' % fname)
+#        self.fp = open(fname, "w")
+#        self._save_stroke(stroke)
+#        self.fp.close()
+#
+#    for i in xrange(len(self.lec.adats)):
+#      adat = self.lec.adats[i]
+#      fname = os.path.join(self.fname, "audio%03d" % i)
+#      self.fp = open(fname, "w")
+#      self.log.write("\nStarting new audio (%s) --------------\n\n" % fname)
+#      self._save_audio(adat)
+#      self.fp.close()
 
     self.log.write("\nDone.\n")
     self.log.close()
@@ -1066,64 +1127,66 @@ def __read_cts(line):
     return 0
   return map(float_or_grace, line.split(' '))
 
-def _save_dct(fname='save.dct', trace=[], positions=[], audiofiles=[]):
+def _save_dc_text(fname='save.dct', lec=None):
   '''Writes the contents of state to a file using the most current file
   version.'''
   output = open(fname, 'w')
 
   # Version line.
-  output.write(WB_REC_VERSION_PREFIX + WB_REC_VERSION + "\n")
+  output.write(DEFAULT_VERSION + "\n")
 
   # Spit out all the times at which the user hit "clear screen."
-  for t in state.cleartimes:
-    output.write("%lf " % t)
+  it = iter(lec)
+  while it.has_next():
+    e = next(it)
+    if isinstance(e, Start) or isinstance(e, Clear):
+      output.write("%lf " % e.t)
   output.write("\n")
 
   # Spit out all the slides (there should be len(state.cleartimes) of these).
-  for slide in state.slides:
-    for stroke in slide:
-      for pt in stroke:
-        output.write("%d %d %lf\n" % tuple(pt))
+  it = iter(lec)
+  while it.has_next():
+    e = next(it)
+    if isinstance(e, Click) or isinstance(e, Point):
+      output.write("%d %d %lf\n" % (e.x(), e.y(), e.t))
+    elif isinstance(e, Release):
+      output.write("%d %d %lf\n\n" % (e.x(), e.y(), e.t))
+    elif isinstance(e, Clear):
       output.write("\n")
-    output.write("\n")
 
-  # Spit out all the strokes that make up the currently-displayed, uncleared
-  # slide.
-  for stroke in state.strokes:
-    for pt in stroke:
-      output.write("%d %d %lf\n" % tuple(pt))
-    output.write("\n")
-  output.flush()
-  output.close()
 
 
 if __name__ == '__main__':
-  t = [1000.0,
+  # This is a "trace" object.  It's kept here for posterity.  Some old code may
+  # turn up some time that refers to a "trace".  With this, you can figure out
+  # what it means.
+  t = [1000.0,  # new slide timestamp
         [
-          [(1000.1, (.0, .0), 1., (.0,.0,.0), (1,1)),
+          # time    position pressure color   screen
+          [(1000.1, (.0, .0), 1., (.0,.0,.0), (1,1)),  # stroke
            (1000.2, (.2, .2), 1., (.0,.0,.0), (1,1)),
            (1000.3, (.4, .4), 1., (.0,.0,.0), (1,1))],
-          [(1000.4, (.6, .6), 1., (.0,.0,.0), (1,1)),
+          [(1000.4, (.6, .6), 1., (.0,.0,.0), (1,1)),  # stroke
            (1000.5, (.8, .8), 1., (.0,.0,.0), (1,1)),
            (1000.6, (1., 1.), 1., (.0,.0,.0), (1,1))]
         ],
-       1005.0,
+       1005.0,  # new slide timestamp
         [
-          [(1005.1, (1., .0), 1., (.0,.0,.0), (1,1)),
+          [(1005.1, (1., .0), 1., (.0,.0,.0), (1,1)),  # stroke
            (1005.2, (.8, .2), 1., (.0,.0,.0), (1,1)),
            (1005.3, (.6, .4), 1., (.0,.0,.0), (1,1))],
-          [(1005.4, (.4, .6), 1., (.0,.0,.0), (1,1)),
+          [(1005.4, (.4, .6), 1., (.0,.0,.0), (1,1)),  # stroke
            (1005.5, (.2, .8), 1., (.0,.0,.0), (1,1)),
            (1005.6, (.0, 1.), 1., (.0,.0,.0), (1,1))]
         ]
       ]
-  p = [(1003.1, (.1, 1.), (1,1)),
+  p = [(1003.1, (.1, 1.), (1,1)),  # movement
        (1003.2, (.1, .8), (1,1)),
        (1003.3, (.1, .6), (1,1)),
        (1003.3, (.1, .4), (1,1)),
        (1003.3, (.1, .2), (1,1)),
        (1003.4, (.1, .0), (1,1))]
-  a = []
+  a = []  # audio
   lec = Lecture()
   lec.load_trace_data(t)
   lec.load_position_data(p)
