@@ -486,3 +486,7 @@ class VideoData(Media):
     if key not in range(self.NUM_TYPES):
       raise Event.Error("Invalid data type key: %s" % key)
     self.dats[key] = data
+
+class InvalidOperationError(RuntimeError):
+  '''Used when an invalid audio operation was made.'''
+  pass
