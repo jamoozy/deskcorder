@@ -49,6 +49,7 @@ class TestDCB(unittest.TestCase):
     self.assertEqual(None, self.dcb.lec)
 
   def test_simple_lecture(self):
+    print 'testing ' + self.dcb.fname
     lec = datatypes.Lecture()
     lec.append(datatypes.Start(12345, (500,400)))
     lec.append(datatypes.Color(12345, (1, 0, 0)))
