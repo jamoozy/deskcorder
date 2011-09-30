@@ -10,7 +10,6 @@ import math
 import sys
 import os
 import tempfile
-from linux import InvalidOperationError
 from datatypes import *
 
 import fileio
