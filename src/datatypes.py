@@ -289,6 +289,7 @@ class Event(object):
     pass
 
   def __init__(self, t):
+    '''Stores the time the event was instantiated.'''
     self.t = t
 
   def utime(self):
