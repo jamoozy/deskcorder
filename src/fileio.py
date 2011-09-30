@@ -5,7 +5,11 @@ import base64
 import xml.dom.minidom
 import struct  # for binary conversions
 import zlib    # to compress audio data in v0.1.x
-import speex   # to compress audio data in v0.2.x
+try:
+  import speex   # to compress audio data in v0.2.x
+  use_speex = True
+except ImportError:
+  use_speex = False
 import wave
 import tarfile
 import tempfile
@@ -18,6 +22,8 @@ VALID_VERSIONS = [(0,1,0), (0,1,1), (0,1,2), (0,2,0), (0,3,0)]
 
 # Currently-supported formats.
 FORMATS = {'dcx': "Deskcorder XML file",
+           'dct': "Deskcorder Tar file",
+           'dcd': "Deskcorder directory",
            'dar': "Deskcorder archive",
            'dcb': "Deskcorder binary file"}
 
@@ -120,9 +126,6 @@ def save(fname, lec=None, req_v=DEFAULT_VERSION):
     save_strokes_as_csv(fname, lec)
   else:
     DCB(fname, req_v).save(lec)
-    
-    
-
 
 def save_strokes_as_csv(fname, lec):
   f = open(fname, 'w')
@@ -163,133 +166,104 @@ class DCB(object):
     self.lec = None
     self.state = Lecture.State()
 
-  def _write_bin_data(self, fmt, *args):
-    self.fp.write(struct.pack(fmt, *args))
-
-#  XXX Deprecated.
-#  def save(self, lec = None):
-#    '''Writes a lecture and audio data to a file.'''
-#    if lec is None:
-#      return
-#    if self.v != DEFAULT_VERSION:
-#      raise VersionError(self.v)
-#
-#    self.fp = open(self.fname, 'wb')
-#    self.log = open(self.fname + ".save_log", 'w')
-#
-#    self.lec = lec
-#
-#    # --- header ---
-#    self.fp.write(MAGIC_NUMBER)
-#    self._write_bin_data("<III", self.v[0], self.v[1], self.v[2])
-#    #self.fp.write(struct.pack("<III", self.v[0], self.v[1], self.v[2]))
-#    self.log.write("File version: (%d,%d,%d)\n" % self.v)
-#    if self.v[1] >= 2:
-#      self.fp.write(struct.pack("<f", lec.aspect_ratio))
-#      self.log.write('File has %d slides, ar = %.2f\n' \
-#          % (len(lec.slides), lec.aspect_ratio))
-#    else:
-#      self.log.write('File will have %d slides\n' % len(lec.slides))
-#
-#    # --- slides ---
-#    self.fp.write(struct.pack("<I", len(lec)))
-#    for slide in lec.slides:  # Slide block
-#      self._save_slide(slide)
-#
-#    # --- moves ---
-#    self.fp.write(struct.pack("<I", len(lec.moves)))  # number of moves sans mouse click
-#    self.log.write('%d positions\n' % len(lec.moves))
-#    self.log.flush()
-#    for m in lec.moves:
-#      self._save_move(m)
-#
-#    # --- audio ---
-#    self.fp.write(struct.pack("<I", len(self.lec.adats))) # number of audio files
-#    for af in self.lec.adats:
-#      self._save_audio(af)
-#
-#    self.fp.close()
-#    self.fp = None
-#    self.log.close()
-#    self.log = None
-
-  def _save_slide(self, slide):
-    '''Writes a slide to file in DCB format.'''
-    self.fp.write(struct.pack("<QI", int(slide.t * 1000), len(slide))) # tstamp & number of strokes
-    self.log.write('  slide: %d strokes at %.0fms\n' % (len(slide), slide.t))
-    self.log.flush()
-    for stroke in slide.strokes:  # Stroke block
-      self._save_stroke(stroke)
-
-  def _save_stroke(self, stroke):
-    '''Writes a stroke to file in DCB format.'''
-    self.fp.write(struct.pack("<I", len(stroke))) # number of points in stroke
-    self.log.write('  stroke has %d points\n' % len(stroke))
-    self.log.flush()
-    if len(stroke) > 0:  # remainder of Stroke block
-      # Stroke color
-      if self.v == (0,2,0):
-        self.fp.write(struct.pack("<ff", stroke.aspect_ratio, stroke.thickness))
-        self.log.write("  stroke has ar = %.2f, th = %.2f\n" \
-            % (stroke.aspect_ratio, stroke.thickness))
-      self.fp.write(struct.pack("<fff", stroke.color[0], stroke.color[1], stroke.color[2]))
-      self.log.write('  stroke color: (%.3f,%.3f,%.3f)\n' % stroke.color)
-      self.log.flush()
-      for point in stroke.points:
-        self._save_point(point)
-
-  def _save_click(self, click, num_points):
-    self.fp.write(struct.pack("<IfffffQfff", num_points,
-      self.state.aspect_ratio(), self.state.thickness,
-      self.state.color.r(), self.state.color.g(), self.state.color.b(),
-      1000 *  click.t, click.x(), click.y(), 0.01))
-    self.log.write("click (%.3f,%.3f) @ %.1f\n" % (click.pos + (click.t,)))
-    self.log.flush()
-
-  def _save_point(self, point):
-    '''Writes a point to file in DCB format.'''
-    if self.v == (0,1,2):
-      thickness = point.p / math.sqrt(2)
-    else:
-      thickness = point.p
-    self.fp.write(struct.pack("<Qfff", point.t * 1000,
-        point.x(), point.y(), thickness))
-    self.log.write('    point (%.3f,%.3f) @ %.1f with %.2f%%\n' \
-        % (point.x(), point.y(), point.t, thickness * 100))
-    self.log.flush()
-
-  def _save_release(self, rel):
-    self.fp.write(struct.pack("<Qfff", rel.utime() * 1000,
-        rel.x(), rel.y()))
-    self.log.write("    release (%.3f,%.3f) @ %.1f\n" \
-        % (rel.pos + rel.utime()))
-    self.log.flush()
-
-  def _save_move(self, move):
-    '''Writes a move to file in DCB format.'''
-    # point tstamp (ms), x, y
-    self.fp.write(struct.pack("<Qff", move.t * 1000, move.x(), move.y()))
-    self.log.write('  pos: (%.3f,%.3f) @ %fms\n' % (move.x(), move.y(), move.t))
-    self.log.flush()
-
-  def _save_audio(self, audio):
-    '''Writes audio data to file in DCB format.'''
-    if self.v[1] == 1:
-      c_data = zlib.compress(audio[1], zlib.Z_BEST_COMPRESSION)
-    elif self.v[1] == 2:
-      s = speex.new(raw = True)
-      c_data = s.encode(audio[1])
-
-    # tstamp (ms), bytes of data in audio file
-    self.fp.write(struct.pack("<QQ", int(audio[0] * 1000), len(c_data)))
-    self.log.write('  audio @ %.2fs with %d bytes\n' % (audio[0], len(c_data)))
-    self.log.flush()
-    self.fp.write(c_data) # (compressed) audio data
+  @staticmethod
+  def bin_write(f, fmt, *args):
+    '''Writes to file f using struct.pack(fmt, *args).'''
+    f.write(struct.pack(fmt, *args))
 
   @staticmethod
   def bin_read(f, fmt):
     '''Reads file f using struct to get datatypes shown in fmt.'''
-    return struct.unpack(fmt, f.read(struct.calcsize(fmt)))
+    try:
+      l = struct.calcsize(fmt)
+      s = f.read(l)
+      return struct.unpack(fmt, s)
+    except struct.error as e:
+      print 'got', s
+      print 'which is', len(s), 'when', l, 'was requested'
+      print 'reading again yields "%s"' % hex(ord(f.read(1)))
+      sys.stdout.flush()
+      raise e
+
+  def _make_lec(self, lec):
+    # Build old lecture object.
+    self.lec = {}
+    self.lec['slides'] = []
+    self.lec['moves'] = []
+    self.lec['adats'] = []
+
+    it = iter(lec)
+    while it.has_next():
+      e = next(it)
+      if isinstance(e, Start) or isinstance(e, Clear):
+        slide = {}
+        slide['t'] = e.t
+        slide['aspect_ratio'] = e.width() / e.height()
+        slide['strokes'] = []
+        self.lec['slides'].append(slide)
+      elif isinstance(e, Click):
+        stroke = {}
+        stroke['thickness'] = 0.5
+        stroke['aspect_ratio'] = self.lec['slides'][-1]['aspect_ratio']
+        stroke['color'] = self.state.color
+        stroke['points'] = [e]
+        self.lec['slides'][-1]['strokes'].append(stroke)
+      elif isinstance(e, Point):
+        self.lec['slides'][-1]['strokes'][-1]['points'].append(e)
+      elif isinstance(e, Move):
+        pass # TODO handle move
+      elif isinstance(e, Color):
+        self.state.color = e.color
+      elif isinstance(e, AudioRecord):
+        pass # TODO handle audio
+      elif isinstance(e, VideoRecord):
+        pass # TODO handle video
+
+  def save(self, lec = None):
+    '''(Deprecated) Writes a lecture and audio data to a file.'''
+    if lec is None:
+      return
+    if self.v != DEFAULT_VERSION:
+      raise VersionError(self.v)
+
+    self.fp = open(self.fname, 'wb')
+    self.log = open(self.fname + ".save_log", 'w')
+    
+    # Convert passed lecture to old lecture format.
+    self._make_lec(lec)
+
+    # --- header ---
+    self.fp.write(MAGIC_NUMBER)
+    DCB.bin_write(self.fp, "<III", *self.v)
+    self.log.write("File version: (%d,%d,%d)\n" % self.v)
+    if self.v[1] >= 2:
+      DCB.bin_write(self.fp, "<f", self.lec['slides'][0]['aspect_ratio'])
+      self.log.write('File has %d slides, ar = %.2f\n' \
+          % (len(self.lec['slides']), self.lec['slides'][0]['aspect_ratio']))
+    else:
+      self.log.write('File will have %d slides\n' % len(self.lec['slides']))
+
+    # --- slides ---
+    DCB.bin_write(self.fp, "<I", len(self.lec['slides']))
+    for slide in self.lec['slides']:  # Slide block
+      self._save_slide(slide)
+
+    # --- moves ---
+    DCB.bin_write(self.fp, "<I", len(self.lec['moves']))  # number of moves sans mouse click
+    self.log.write('%d positions\n' % len(self.lec['moves']))
+    self.log.flush()
+    for m in self.lec['moves']:
+      self._save_move(m)
+
+    # --- audio ---
+    DCB.bin_write(self.fp, "<I", len(self.lec['adats'])) # number of audio files
+    for af in self.lec['adats']:
+      self._save_audio(af)
+
+    self.fp.close()
+    self.fp = None
+    self.log.close()
+    self.log = None
 
   def load(self):
     '''Loads DCB-v0.x.x'''
@@ -355,6 +329,14 @@ class DCB(object):
     finally:
       self.lec = None
 
+  def _save_slide(self, slide):
+    '''Writes a slide to file in DCB format.'''
+    DCB.bin_write(self.fp, "<QI", int(slide['t'] * 1000), len(slide['strokes'])) # tstamp & number of strokes
+    self.log.write('  slide: %d strokes at %.0fms\n' % (len(slide['strokes']), slide['t']))
+    self.log.flush()
+    for stroke in slide['strokes']:  # Stroke block
+      self._save_stroke(stroke)
+
   def _load_slide(self):
     # tstamp of "clear" (ms), number of strokes in first slide
     self.log.write("  We're at self.fp.tell():%d\n" % self.fp.tell())
@@ -367,6 +349,23 @@ class DCB(object):
       self.log.write("  stroke %d\n" % stroke_i)
       self.log.flush()
       self._load_stroke()
+
+  def _save_stroke(self, stroke):
+    '''Writes a stroke to file in DCB format.'''
+    DCB.bin_write(self.fp, "<I", len(stroke['points'])) # number of points in stroke
+    self.log.write('  stroke has %d points\n' % len(stroke['points']))
+    self.log.flush()
+    if len(stroke['points']) > 0:  # remainder of Stroke block
+      # Stroke color
+      if self.v == (0,2,0):
+        DCB.bin_write(self.fp, "<ff", stroke['aspect_ratio'], stroke['thickness'])
+        self.log.write("  stroke has ar = %.2f, th = %.2f\n" \
+            % (stroke['aspect_ratio'], stroke['thickness']))
+      DCB.bin_write(self.fp, "<fff", *stroke['color'])
+      self.log.write('  stroke color: (%.3f,%.3f,%.3f)\n' % stroke['color'])
+      self.log.flush()
+      for point in stroke['points']:
+        self._save_point(point)
 
   def _load_stroke(self):
     # number of points in this stroke, color (r,g,b)
@@ -411,12 +410,16 @@ class DCB(object):
     else:
       self.log.write('    Empty stroke!\n')
 
-  def _load_click(self):
-    if self.v[1] < 3:
-      ts, x, y, th_pr = DCB.bin_read(self.fp, "<Qfff")
+  def _save_point(self, point):
+    '''Writes a point to file in DCB format.'''
+    if self.v == (0,1,2):
+      p = point.p / math.sqrt(2)
     else:
-      ts, x, y = DCB.bin_read(self.fp, "<Qff")
-    self.lec.append(Click(ts / 1000.0, (x, y)))
+      p = point.p
+    DCB.bin_write(self.fp, "<Qfff", point.t * 1000, point.x(), point.y(), p)
+    self.log.write('    point (%.3f,%.3f) @ %.1f with %.2f%%\n' \
+        % (point.x(), point.y(), point.t, p * 100))
+    self.log.flush()
 
   def _load_point(self):
     # timestamp (ms), x, y, "thickness"
@@ -435,6 +438,33 @@ class DCB(object):
     elif self.v == (0,1,2):
       self.lec.append(Point(ts / 1000.0, (x, y), th_pr * math.sqrt(2)))
 
+
+
+  ##############################################################################
+  # ------------------------ Lecture object handling ------------------------- #
+  ##############################################################################
+
+  def _save_click(self, click, num_points):
+    DCB.bin_write(self.fp, "<IfffffQfff", num_points,
+      self.state.aspect_ratio(), self.state.thickness,
+      self.state.color.r(), self.state.color.g(), self.state.color.b(),
+      click.t * 1000, click.x(), click.y(), 0.01)
+    self.log.write("click (%.3f,%.3f) @ %.1f\n" % (click.pos + (click.t,)))
+    self.log.flush()
+
+  def _load_click(self):
+    if self.v[1] < 3:
+      ts, x, y, th_pr = DCB.bin_read(self.fp, "<Qfff")
+    else:
+      ts, x, y = DCB.bin_read(self.fp, "<Qff")
+    self.lec.append(Click(ts / 1000.0, (x, y)))
+
+  def _save_release(self, rel):
+    DCB.bin_write(self.fp, "<Qfff", rel.utime() * 1000, rel.x(), rel.y())
+    self.log.write("    release (%.3f,%.3f) @ %.1f\n" \
+        % (rel.pos + rel.utime()))
+    self.log.flush()
+
   def _load_release(self):
     if self.v[1] < 3:
       ts, x, y, th_pr = DCB.bin_read(self.fp, "<Qfff")
@@ -444,6 +474,13 @@ class DCB(object):
     self.log.write("      release (%.3f,%.3f) @ %.1f\n" % (x, y, ts / 1000.0))
     self.log.flush()
 
+  def _save_move(self, move):
+    '''Writes a move to file in DCB format.'''
+    # point tstamp (ms), x, y
+    DCB.bin_write(self.fp, "<Qff", move.t * 1000, move.x(), move.y())
+    self.log.write('  pos: (%.3f,%.3f) @ %fms\n' % (move.x(), move.y(), move.t))
+    self.log.flush()
+
   def _load_move(self):
     # tstamp (ms), x, y
     self.log.write(  "We're at self.fp.tell():%d\n" % self.fp.tell())
@@ -451,6 +488,31 @@ class DCB(object):
     self.log.write('    (%.3f,%.3f) @ %.1fs\n' % (x, y, ts / 1000.))
     self.log.flush()
     self.lec.append(Move(ts / 1000.0, (x, y)))
+
+  def _save_audio(self, audio):
+    '''Writes audio data to file in DCB format.'''
+    if self.v[1] == 1:
+      c_data = zlib.compress(audio[1], zlib.Z_BEST_COMPRESSION)
+    elif self.v[1] == 2:
+      if use_speex:
+        s = speex.new(raw = True)
+        c_data = s.encode(audio[1])
+      else:
+        sys.stdout.flush()
+        sys.stderr.write("Warning: Speex not imported!")
+        traceback.print_stack()
+        sys.stderr.flush()
+    else:
+      sys.stdout.flush()
+      sys.stderr.write("Warning: Unhandled file version! " + self.v)
+      traceback.print_stack()
+      sys.stderr.flush()
+
+    # tstamp (ms), bytes of data in audio file
+    DCB.bin_write(self.fp, "<QQ", int(audio[0] * 1000), len(c_data))
+    self.log.write('  audio @ %.2fs with %d bytes\n' % (audio[0], len(c_data)))
+    self.log.flush()
+    self.fp.write(c_data) # (compressed) audio data
 
   def _load_audio(self):
     '''Appends the audio entry at 'self.fp' to 'self.adats'.'''
@@ -466,9 +528,15 @@ class DCB(object):
       adat.add_type(AudioData.ZLB, cdat)
       raw_dat = zlib.decompress(cdat)
     elif self.v[1] == 2:
-      adat.add_type(AudioData.SPX, cdat)
-      s = speex.new(raw = True)
-      raw_dat = s.decode(cdat)
+      if use_speex:
+        adat.add_type(AudioData.SPX, cdat)
+        s = speex.new(raw = True)
+        raw_dat = s.decode(cdat)
+      else:
+        sys.stdout.flush()
+        sys.stderr.write("Warning: Speex not imported!")
+        traceback.print_stack()
+        sys.stderr.flush()
     else:
       raw_dat = cdat
     adat.add_type(AudioData.RAW, raw_dat)
@@ -518,10 +586,7 @@ class DCD(DCB):
         
         slide_dir = os.path.join(self.fname, "slide000")
         os.mkdir(slide_dir)
-        num_slides = 1
         num_strokes = 0
-        num_moves = 0
-        num_points = 0
 
         self.fp = open(os.path.join(slide_dir, "metadata"), "w")
         self.fp.write("%f\n" % e.t)
@@ -560,36 +625,6 @@ class DCD(DCB):
         pass
       else:
         raise InternalError("Unrecognized Event " + e)
-#    for i in xrange(len(self.lec.slides)):
-#      slide_dir = os.path.join(self.fname, "slide%03d" % i)
-#      slide = self.lec.slides[i]
-#      os.mkdir(slide_dir)
-#      self.fp = open(os.path.join(slide_dir, "metadata"), "w")
-#      self.fp.write("%f\n" % slide.t)
-#      self.log.write("Slide started at %f\n" % slide.t)
-#      self.fp.close()
-#      j = 0
-#      for stroke in slide.strokes:
-#        j += 1
-#        fname = os.path.join(slide_dir, "stroke%03d" % j)
-#        self.log.write('\nStarting new stroke (%s) -------------\n\n' % fname)
-#        self.fp = open(fname, "w")
-#        self._save_stroke(stroke)
-#        self.fp.close()
-#
-#    for i in xrange(len(self.lec.adats)):
-#      adat = self.lec.adats[i]
-#      fname = os.path.join(self.fname, "audio%03d" % i)
-#      self.fp = open(fname, "w")
-#      self.log.write("\nStarting new audio (%s) --------------\n\n" % fname)
-#      self._save_audio(adat)
-#      self.fp.close()
-
-    self.log.write("\nDone.\n")
-    self.log.close()
-    self.log = None
-    self.fp = None
-    self.lec = None
 
   def load(self):
     if not os.path.exists(self.fname):
