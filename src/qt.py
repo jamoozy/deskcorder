@@ -1,15 +1,17 @@
 import sys
 import time
 
+import dummy
+
 from PyQt4.QtGui import *
 from PyQt4 import QtCore
-from PyQt4.QtCore import SLOT, SIGNAL
+from PyQt4.QtCore import SLOT, SIGNAL, QTimer
 import PyQt4.uic
 
-import deskcorder as dc
+from datatypes import *
 
 class Canvas(QGraphicsScene):
-  def __init__(self, parent = None):
+  def __init__(self, dc, parent = None):
     # Setting the "size" of the scene to 0,0 x 1,1 disables scrolling.
     QGraphicsScene.__init__(self, .0, .0, 1., 1., parent)
 
@@ -17,8 +19,7 @@ class Canvas(QGraphicsScene):
     self.frozen = False
     self.drawing = False
 
-    self.trace = dc.Trace()
-    self.trace.append(time.time())
+    self.dc = dc
     self.color = (.0, .0, .0) # each val in [0,1]
     self.pen_width = 5
 
@@ -45,44 +46,62 @@ class Canvas(QGraphicsScene):
     print event
 
   def get_size(self):
-    return self.size_fun()
+    return self.width(), self.height()
 
   def ensure_scale(self):
     size = (self.size_fun().width(), self.size_fun().height())
     if size != self.last_size:
       for item in self.items():
         self.removeItem(item)
-      for stroke in self.trace.get_strokes():
-        pen = QPen()
-        pen.setColor(QColor(stroke.r(), stroke.g(), stroke.b()))
-        for i in xrange(len(stroke.points[1:])):
-          # XXX still need to set pen
-          p0 = (stroke[i-1].x() * size[0] - size[0] / 2, stroke[i-1].y() * size[1] - size[1] / 2)
-          p1 = (stroke[i].x() * size[0] - size[0] / 2,  stroke[i].y() * size[1] - size[1] / 2)
-          self.addLine(p0[0], p0[1], p1[0], p1[1], pen)
-    self.last_size = size
+
+      color = QColor(0, 0, 0)
+      it = iter(self.dc.lec)
+      p1 = None
+      while it.has_next():
+        e = it.next()
+        if isinstance(e, Color):
+          color = QColor(e.r(), e.g(), e.b())
+        elif isinstance(e, Click):
+          pen = QPen()
+          pen.setColor(color)
+          p1 = e
+        elif isinstance(e, Point):
+          self.addLine(p1.x(), p1.y(), e.x(), e.y(), pen)
+          p1 = e
+        elif isinstance(e, Release):
+          self.addLine(p1.x(), p1.y(), e.x(), e.y(), pen)
+          p1 = None
+      self.last_size = size
 
   # ---------------- Drawing -----------------------------
 
   def mousePressEvent(self, event):
     self.drawing = True
     self.dirty = True
-    self.trace.last().append(self.color)
+    self.dc.lec.append(Click(event.scenePos().x(), event.scenePos().y()))
 
   def mouseReleaseEvent(self, event):
+    self.dc.lec.append(Release(event.scenePos().x(), event.scenePos().y()))
     self.drawing = False
 
   def mouseMoveEvent(self, event):
     self.ensure_scale()
+    curr = event.scenePos()
     if self.drawing:
-      curr = event.scenePos()
       curr_norm = (curr.x() / self.last_size[0] + .5, curr.y() / self.last_size[1] + .5)
       if 0 <= curr_norm[0] and curr_norm[0] <= 1 and 0 <= curr_norm[1] and curr_norm[1] <= 1:
-        self.trace.last().last().append(curr_norm, time.time(), 1.)
+        p = hasattr(event, 'pressure') and event.pressure() or .5
+        # TODO add to Lecture
+#        r = hasattr(event, 'rotation') and event.rotation() or 0
+#        tp = hasattr(event, 'tangentialPressure') and event.tangentialPressure() or .5
+#        t = hasattr(event, 'xTilt') and (event.xTilt(), event.yTilt()) or (.0,.0)
+        self.dc.lec.append(Point(time.time(), (curr.x(), curr.y()), p))
         prev = event.lastScenePos()
         prev_norm = (prev.x() / self.last_size[0] + .5, prev.y() / self.last_size[1] + .5)
         if 0 <= prev_norm[0] and prev_norm[0] <= 1 and 0 <= prev_norm[1] and prev_norm[1] <= 1:
           self.addLine(prev.x(), prev.y(), curr.x(), curr.y(), self.pen)
+    else:
+      self.dc.lec.append(Move(curr.x(), curr.y()))
 
   def get_time_of_first_event(self):
     return self.trace.get_time_of_first_event()
@@ -97,7 +116,7 @@ class Canvas(QGraphicsScene):
     self.frozen = False
 
   def clear(self):
-    self.trace = dc.Trace()
+    self.dc.lec.append(Clear())
 
   def refresh(self):
     pass
@@ -115,11 +134,12 @@ Deskcorder XML (*.dcx);;\
 Deskcorder Text (*.dct);;\
 All Deskcorder Files (*.dcb *.dcx *.dct);;\
 All Files (*.*)'''
-  def __init__(self):
+  def __init__(self, dc):
+    self.dc = dc
     self.app = QApplication(sys.argv);
     self.app.quitOnLastWindowClosed = False
-    self.root = PyQt4.uic.loadUi('layout.ui')
-    self.canvas = Canvas()
+    self.root = PyQt4.uic.loadUi('../config/layout.ui')
+    self.canvas = Canvas(self.dc)
     self.root.gv.setScene(self.canvas)
 
     self.app.connect(self.root.color_box, SIGNAL('currentIndexChanged(QString)'), self.color_change)
@@ -191,7 +211,7 @@ All Files (*.*)'''
         if self.open_fun is not None:
           self.open_fun(fname)
         else:
-          msg_box_err('Internal Error', 'Someone forgot to register an open handler!')
+          self.msg_box_err('Internal Error', 'Someone forgot to register an open handler!')
 
   def save(self):
     if self.last_save is None:
@@ -199,7 +219,7 @@ All Files (*.*)'''
     elif self.save_fun is not None:
       self.save_fun(self.last_save)
     else:
-      msg_box_err(QMessageBox.Critical, 'Internal Error', 'Someone forgot to register a save handler!')
+      self.msg_box_err(QMessageBox.Critical, 'Internal Error', 'Someone forgot to register a save handler!')
 
   def save_as(self):
     fname = str(QFileDialog.getSaveFileName(None, 'Save your Deskcorder Progress', 'saves', self.DC_FORMATS))
@@ -208,7 +228,7 @@ All Files (*.*)'''
       if self.save_fun is not None:
         self.save_fun(fname)
       else:
-        msg_box_err(QMessageBox.Critical, 'Internal Error', 'Someone forgot to register a save handler!')
+        self.msg_box_err(QMessageBox.Critical, 'Internal Error', 'Someone forgot to register a save handler!')
 
   @staticmethod
   def msg_box_err(title, msg):
@@ -267,6 +287,9 @@ All Files (*.*)'''
 
   def connect_exp_pdf(self, fun):
     pass
+  
+  def connect_exp_swf(self, fun):
+    pass
 
   def play_pressed(self, state = None):
     pass
@@ -287,6 +310,9 @@ All Files (*.*)'''
     for i in xrange(len(self.timers)):
       if self.timers[i] is timer:
         del self.timers[i]
+        
+  def get_size(self):
+    return self.canvas.get_size()
 
   def init(self):
     self.root.show()
@@ -298,6 +324,6 @@ All Files (*.*)'''
   def deinit(self):
     pass
   
-class Audio:
+class Audio(dummy.Audio):
   def __init__(self, dc):
     pass
